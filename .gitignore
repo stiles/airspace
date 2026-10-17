@@ -1,0 +1,11 @@
+# Local configuration holds the home point
+airspace.toml
+data/
+
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+dist/
+node_modules/
+.DS_Store
