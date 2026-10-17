@@ -1,0 +1,77 @@
+import type { Aircraft, Feed, Snapshot } from '../lib/types';
+
+export function aircraft(overrides: Partial<Aircraft> = {}): Aircraft {
+  return {
+    id: 'a1f48f',
+    registration: 'N225LA',
+    callsign: 'N225LA',
+    aircraft_type: 'AS50',
+    description: 'AEROSPATIALE AS-350 Ecureuil',
+    category: 'A7',
+    class: 'rotorcraft',
+    class_rule: 'adsb_category',
+    position_source: 'adsb_icao',
+    longitude: -118.41,
+    latitude: 34.01,
+    altitude_baro_ft: 1500,
+    altitude_geom_ft: 1600,
+    on_ground: false,
+    ground_speed_kt: 80,
+    track_deg: 90,
+    vertical_rate_fpm: 0,
+    squawk: '1200',
+    emergency: 'none',
+    position_at: '2026-10-17T20:00:00.000+00:00',
+    position_time_basis: 'derived_age',
+    time_flag: null,
+    position_age_s: 1,
+    freshness: 'fresh',
+    last_received_at: '2026-10-17T20:00:01.000+00:00',
+    in_latest_response: true,
+    distance_m: 1500,
+    bearing_deg: 45,
+    inside_visible: true,
+    trail: [
+      [
+        [-118.42, 34.0],
+        [-118.41, 34.01],
+      ],
+    ],
+    ...overrides,
+  };
+}
+
+export function snapshot(overrides: Partial<Snapshot> = {}, feed: Partial<Feed> = {}): Snapshot {
+  return {
+    version: 1,
+    mode: 'live',
+    generated_at: '2026-10-17T20:00:02.000+00:00',
+    sequence: 1,
+    session_id: 1,
+    source: { provider: 'adsbfi', name: 'adsb.fi', url: 'https://adsb.fi' },
+    area: {
+      home: { latitude: 34.0, longitude: -118.42, label: 'Home' },
+      visible_radius_m: 8046.72,
+      collection_radius_m: 18520,
+      max_altitude_baro_ft: null,
+    },
+    thresholds: { fade_s: 20, hide_s: 60, trail_gap_s: 30, trail_duration_s: 300 },
+    feed: {
+      status: 'live',
+      polls: 1,
+      successes: 1,
+      consecutive_failures: 0,
+      last_poll_at: '2026-10-17T20:00:01.000+00:00',
+      last_success_at: '2026-10-17T20:00:01.000+00:00',
+      last_success_age_s: 1,
+      last_error: null,
+      last_error_at: null,
+      paused: null,
+      ...feed,
+    },
+    aircraft: [aircraft()],
+    last_seen: [],
+    events: [],
+    ...overrides,
+  };
+}

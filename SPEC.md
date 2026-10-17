@@ -228,6 +228,16 @@ Built October 17, 2026. Decisions made during implementation:
 
 Add rings, markers, trails, selection, filters and feed status. Verify that marker orientation, distance units, timestamps and unknown values agree with recorded observations. Changing a display filter must not multiply provider calls.
 
+Built October 17, 2026. Decisions made during implementation:
+
+- Basemap is Mapbox's public `dark-v11`; the team's `cnndigital` styles aren't reachable with a personal token. Mercator, north-up, rotation disabled.
+- Symbols are SDF images drawn on a canvas so the style can color them. Altitude labels use hundreds of feet.
+- On-ground aircraft and surface vehicles are hidden by default. At LAX they outnumber airborne traffic and age poorly. Unknown-altitude airborne traffic stays visible.
+- The client re-ages positions between polls with the server's thresholds, and sorts the list by distance itself.
+- Any failure (provider, collector pause or local server) sets an untrusted state: red header, grayscale map and an empty-list message that points to the status. Replay shows the recorded feed status.
+- The interim replay entry point is `?session=&at=` on the dashboard URL.
+- Verified in headless Chromium against live data at the demo center and against replay of the first trial: marker rotation matches recorded tracks, selection survives polls, a sleep-gap moment shows "no current data," and the browser made only local API requests.
+
 ### 4. Add replay and exports
 
 Provide session selection, a timeline and pause/speed controls. Export documented JSON/GeoJSON with source and timestamp provenance. Add optional FlightTracer compatibility after inspecting its current interfaces.

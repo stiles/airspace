@@ -2,7 +2,9 @@
 
 A local tracker for aircraft flying near a home point, with attention to helicopters and low-altitude traffic. See [SPEC.md](SPEC.md) for the plan.
 
-Milestones 1 and 2 are built: a headless collector, a coverage report, and a local state service and API. The Mapbox display (milestone 3) isn't built yet.
+![Airspace dashboard: a dark map of West Los Angeles with mile rings, aircraft symbols and trails, an LAPD helicopter in amber, and a list of nearby aircraft](img/airspace_example.png)
+
+Milestones 1 through 3 are built: a headless collector, a coverage report, a local state service and API, and a Mapbox dashboard. Replay controls and exports (milestone 4) come next.
 
 ## Setup
 
@@ -46,6 +48,37 @@ uv run airspace replay --session latest   # recorded data only, no provider requ
 Reading the API never triggers a provider request. The live state and `/api/replay` use the same state builder, and replay reads through a read-only SQLite connection. Coordinates are always `[longitude, latitude]`.
 
 Feed status is one of `starting`, `live`, `delayed` (no success for longer than the fade threshold), `degraded` (latest poll failed), `stale` (no success for longer than the hide threshold) or `paused` (collection stopped on an error that needs attention). An outage shows up as `stale`, never as an empty sky.
+
+## Dashboard
+
+The dashboard is Svelte 5, TypeScript, Vite and Mapbox GL JS, in `web/`. It needs a public Mapbox token (`pk.`), ideally restricted to `http://127.0.0.1:*`. Put it in `web/.env.local`, which Git ignores:
+
+```bash
+VITE_MAPBOX_TOKEN=pk....
+```
+
+Vite builds the token into the bundle, and `web/dist/` is gitignored too. Then:
+
+```bash
+cd web && npm install && npm run build && cd ..
+uv run airspace serve        # dashboard at http://127.0.0.1:8000
+```
+
+For frontend work, run `npm run dev` in `web/` while `airspace serve` is running. The dev server at http://127.0.0.1:5173 forwards `/api` to port 8000.
+
+To view a recorded moment, run `airspace replay` and open `/?session=<id>&at=<ISO time>`. A timeline is part of milestone 4.
+
+What the dashboard does:
+
+- **Map:** north-up dark map with mile rings, the visible boundary and the collection limit. Symbols are rotated by ground track. Helicopters get an amber rotor symbol only when the classifier says rotorcraft, and aircraft without a track get an unrotated symbol. Labels show altitude in hundreds of feet (`015` means 1,500 ft barometric).
+- **Updates:** the browser reads `/api/state` every two seconds. That never triggers provider requests. Map layers are created once; each update only replaces source data.
+- **Filters:** altitude presets, unknown altitude (shown by default), on-ground aircraft and surface vehicles (hidden by default, to keep LAX traffic out of the way), and list-only-within-visible-radius. Filters run in the browser.
+- **Freshness:** positions keep aging on the browser's clock between updates. If the local server stops responding, markers fade and then disappear instead of freezing.
+- **Feed status:** any outage, upstream or local, turns the header red and grays out the map. It never reads as an empty sky. Replay shows the recorded feed status, so a recorded outage looks like one.
+
+```bash
+cd web && npm test && npm run check
+```
 
 ## Helicopter classification
 

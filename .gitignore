@@ -9,3 +9,9 @@ __pycache__/
 dist/
 node_modules/
 .DS_Store
+
+# Local secrets (Mapbox token)
+.env.local
+*.local
+# Env templates were edited with real values once; document variables in the README instead
+.env.example
