@@ -34,33 +34,33 @@
   .detail {
     min-width: 0;
     overflow: hidden;
-    color: #aab5bc;
+    color: var(--muted-strong);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .ok .dot {
-    background: #3ccf7a;
+    background: var(--phosphor);
   }
   .info .dot {
-    background: #46c2ff;
+    background: var(--accent);
   }
   .warn {
     background: rgba(255, 176, 32, 0.12);
   }
   .warn .dot {
-    background: #ffb020;
+    background: var(--amber);
   }
   /* Outages are loud on purpose */
   .alert {
-    background: #5c1a1a;
+    background: var(--alert-bg);
     color: #fff;
   }
   .alert .dot {
-    background: #ff5a5a;
+    background: var(--alert);
     animation: pulse 1.2s ease-in-out infinite;
   }
   .alert .detail {
-    color: #f3d0d0;
+    color: var(--alert-text);
     white-space: normal;
   }
   @keyframes pulse {

@@ -28,9 +28,9 @@
     margin: 0;
     padding: 10px 12px;
     border: 0;
-    border-bottom: 1px solid #222b31;
+    border-bottom: 1px solid var(--line);
     font-size: 13px;
-    color: #c3ccd2;
+    color: var(--text-soft);
   }
   .select {
     flex-basis: 100%;
@@ -38,10 +38,10 @@
   select {
     width: 100%;
     padding: 5px 6px;
-    border: 1px solid #36424a;
+    border: 1px solid var(--control-line);
     border-radius: 4px;
-    background: #161c20;
-    color: #e6edf2;
+    background: var(--control-bg);
+    color: var(--text);
     font: inherit;
   }
   label {
@@ -51,6 +51,6 @@
     cursor: pointer;
   }
   input {
-    accent-color: #46c2ff;
+    accent-color: var(--accent);
   }
 </style>

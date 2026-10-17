@@ -118,16 +118,16 @@
     >
       <defs>
         <pattern id="sleep" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <rect width="2" height="5" fill="#3a444b" />
+          <rect class="hatch" width="2" height="5" />
         </pattern>
       </defs>
-      <rect x="0" y="8" width={width} height="14" fill="#1a2126" rx="2" />
+      <rect class="bg" x="0" y="8" width={width} height="14" rx="2" />
       {#each drawn as b, i (i)}
         {#if b.polls}
-          <rect x={b.x} y="8" width={Math.max(1, b.width)} height="14" fill={b.failed ? '#d9534f' : '#2f5d4a'} />
+          <rect class={b.failed ? 'failed' : 'ok'} x={b.x} y="8" width={Math.max(1, b.width)} height="14" />
         {/if}
         {#if b.rotorcraft}
-          <rect x={b.x} y="25" width={Math.max(1, b.width)} height="4" fill="#ffb020" />
+          <rect class="heli" x={b.x} y="25" width={Math.max(1, b.width)} height="4" />
         {/if}
       {/each}
       {#each tl?.gaps ?? [] as g, i (i)}
@@ -141,7 +141,7 @@
           <title>Collector asleep, {time(g.start)} to {time(g.end)}</title>
         </rect>
       {/each}
-      <line x1={playheadX} x2={playheadX} y1="2" y2="32" stroke="#46c2ff" stroke-width="2" />
+      <line x1={playheadX} x2={playheadX} y1="2" y2="32" class="playhead" stroke-width="2" />
     </svg>
     <div class="legend">
       <span>{tl ? time(start) : ''}</span>
@@ -157,8 +157,8 @@
 <style>
   .timeline {
     padding: 8px 14px 6px;
-    border-top: 1px solid #222b31;
-    background: #0f1417;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
     font-size: 13px;
   }
   .controls {
@@ -172,10 +172,10 @@
   select,
   summary {
     padding: 4px 8px;
-    border: 1px solid #36424a;
+    border: 1px solid var(--control-line);
     border-radius: 4px;
-    background: #161c20;
-    color: #e6edf2;
+    background: var(--control-bg);
+    color: var(--text);
     font: inherit;
     cursor: pointer;
   }
@@ -204,17 +204,35 @@
     flex-direction: column;
     min-width: 180px;
     padding: 4px 0;
-    border: 1px solid #36424a;
+    border: 1px solid var(--control-line);
     border-radius: 4px;
-    background: #161c20;
+    background: var(--control-bg);
   }
   .menu a {
     padding: 6px 12px;
-    color: #e6edf2;
+    color: var(--text);
     text-decoration: none;
   }
   .menu a:hover {
-    background: #1f282e;
+    background: var(--hover);
+  }
+  .track .bg {
+    fill: var(--track);
+  }
+  .track .ok {
+    fill: var(--ok);
+  }
+  .track .failed {
+    fill: var(--alert);
+  }
+  .track .heli {
+    fill: var(--amber);
+  }
+  .track .hatch {
+    fill: var(--sleep);
+  }
+  .track .playhead {
+    stroke: var(--accent);
   }
   .track {
     display: block;
@@ -222,12 +240,12 @@
     touch-action: none;
   }
   .track:focus-visible {
-    outline: 2px solid #46c2ff;
+    outline: 2px solid var(--accent);
   }
   .legend {
     display: flex;
     justify-content: space-between;
-    color: #8d99a2;
+    color: var(--muted);
     font-size: 11px;
   }
   .keys {
@@ -242,16 +260,16 @@
     margin-left: 8px;
   }
   .k.ok {
-    background: #2f5d4a;
+    background: var(--ok);
   }
   .k.failed {
-    background: #d9534f;
+    background: var(--alert);
   }
   .k.sleep {
-    background: repeating-linear-gradient(45deg, #3a444b 0 2px, transparent 2px 4px);
+    background: repeating-linear-gradient(45deg, var(--sleep) 0 2px, transparent 2px 4px);
   }
   .k.heli {
     height: 4px;
-    background: #ffb020;
+    background: var(--amber);
   }
 </style>

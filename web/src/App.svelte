@@ -203,11 +203,42 @@
 </div>
 
 <style>
+  /* Radar-scope palette; map colors in lib/theme.ts use the same values */
+  :global(:root) {
+    --bg: #050a07;
+    --panel: #08110c;
+    --panel-raised: #0b1711;
+    --line: #143022;
+    --line-soft: #0f2219;
+    --control-bg: #0b1610;
+    --control-line: #1f4a33;
+    --control-line-hover: #2f6e4c;
+    --hover: #0f2018;
+    --selected-bg: #0f2c2f;
+    --text: #d4f7e2;
+    --text-soft: #a9d8bd;
+    --muted-strong: #86b89c;
+    --muted: #5f9077;
+    --faint: #4a705c;
+    --phosphor: #3dff8f;
+    --accent: #7fe7ff;
+    --amber: #ffb020;
+    --unknown: #5c8c72;
+    --surface: #3c5a4a;
+    --track: #0b1a12;
+    --ok: #1d6b42;
+    --sleep: #26392f;
+    --alert: #ff5a5a;
+    --alert-bg: #5c1a1a;
+    --alert-text: #f3d0d0;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: dark;
+  }
   :global(html, body) {
     height: 100%;
     margin: 0;
-    background: #0d1114;
-    color: #e6edf2;
+    background: var(--bg);
+    color: var(--text);
     font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
   }
   :global(#app) {
@@ -231,17 +262,20 @@
     align-items: center;
     gap: 14px;
     padding: 8px 14px;
-    border-bottom: 1px solid #222b31;
+    border-bottom: 1px solid var(--line);
   }
   h1 {
     margin: 0;
-    font-size: 16px;
+    color: var(--phosphor);
+    font-family: var(--mono);
+    font-size: 15px;
     font-weight: 500;
+    letter-spacing: 0.04em;
   }
   .count {
     margin-left: auto;
     flex: none;
-    color: #aab5bc;
+    color: var(--muted-strong);
     font-size: 13px;
   }
   main {
@@ -263,22 +297,22 @@
   .modes {
     display: flex;
     flex: none;
-    border: 1px solid #36424a;
+    border: 1px solid var(--control-line);
     border-radius: 4px;
     overflow: hidden;
   }
   .modes button {
     padding: 4px 10px;
     border: 0;
-    background: #161c20;
-    color: #aab5bc;
+    background: var(--control-bg);
+    color: var(--muted-strong);
     font: inherit;
     font-size: 13px;
     cursor: pointer;
   }
   .modes button[aria-pressed='true'] {
-    background: #12303f;
-    color: #e6edf2;
+    background: var(--selected-bg);
+    color: var(--text);
   }
   /* When data isn't current, mute the map so it can't pass for live */
   .map-pane.untrusted {
@@ -288,7 +322,7 @@
     display: flex;
     flex-direction: column;
     width: 340px;
-    border-left: 1px solid #222b31;
+    border-left: 1px solid var(--line);
   }
   .list-wrap {
     flex: 1;
@@ -297,12 +331,12 @@
   }
   footer {
     padding: 8px 12px;
-    border-top: 1px solid #222b31;
-    color: #6f7c85;
+    border-top: 1px solid var(--line);
+    color: var(--faint);
     font-size: 12px;
   }
   footer a {
-    color: #8d99a2;
+    color: var(--muted);
   }
   @media (max-width: 760px) {
     main {

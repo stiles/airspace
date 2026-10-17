@@ -100,8 +100,8 @@
 <style>
   .detail {
     padding: 12px;
-    border-bottom: 1px solid #222b31;
-    background: #12181c;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-raised);
     font-size: 13px;
   }
   header {
@@ -111,18 +111,20 @@
   }
   h2 {
     margin: 0;
+    color: var(--phosphor);
+    font-family: var(--mono);
     font-size: 17px;
     font-weight: 500;
   }
   .sub {
     margin: 2px 0 0;
-    color: #8d99a2;
+    color: var(--muted);
   }
   .close {
     padding: 0 6px;
     border: 0;
     background: none;
-    color: #aab5bc;
+    color: var(--muted-strong);
     font-size: 22px;
     line-height: 1;
     cursor: pointer;
@@ -134,34 +136,34 @@
     margin: 10px 0 0;
   }
   dt {
-    color: #8d99a2;
+    color: var(--muted);
   }
   dd {
     margin: 0;
     font-variant-numeric: tabular-nums;
   }
   .mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--mono);
   }
   .muted {
-    color: #8d99a2;
+    color: var(--muted);
   }
   .note {
     margin: 8px 0 0;
-    color: #c3ccd2;
+    color: var(--text-soft);
   }
   .note.alert {
-    color: #ff8a8a;
+    color: var(--alert-text);
   }
   .export {
     display: inline-block;
     margin-top: 8px;
-    color: #46c2ff;
+    color: var(--accent);
     font-size: 12px;
   }
   .caveat {
     margin: 10px 0 0;
-    color: #6f7c85;
+    color: var(--faint);
     font-size: 12px;
   }
 </style>

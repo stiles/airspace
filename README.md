@@ -2,7 +2,7 @@
 
 A local tracker for aircraft flying near a home point, with attention to helicopters and low-altitude traffic. See [SPEC.md](SPEC.md) for the plan.
 
-![Airspace dashboard: a dark map of West Los Angeles with mile rings, aircraft symbols and trails, an LAPD helicopter in amber, and a list of nearby aircraft](img/airspace_example.png)
+![Airspace dashboard: a radar-style dark green map of West Los Angeles with mile rings, phosphor-green aircraft and trails, helicopters in amber, and a list of nearby aircraft](img/airspace_example.png)
 
 Milestones 1 through 4 are built: a headless collector, a coverage report, a local state service and API, a Mapbox dashboard, and replay with exports. Milestone 5, an eight-hour soak test and a decision on continuous operation, comes next.
 
@@ -55,8 +55,9 @@ The dashboard is Svelte 5, TypeScript, Vite and Mapbox GL JS, in `web/`. It need
 
 ```bash
 VITE_MAPBOX_TOKEN=pk....
-# Optional. The default style belongs to the stiles Mapbox account, so other accounts should set this:
-VITE_MAPBOX_STYLE=mapbox://styles/mapbox/dark-v11
+# Optional. Defaults to dark-v11, recolored into a radar scope at load. Standard styles work too
+# but keep their own colors:
+VITE_MAPBOX_STYLE=mapbox://styles/stiles/cmv5o51lp007201rogm24804g
 ```
 
 Vite builds the token into the bundle, and `web/dist/` is gitignored too. Then:
@@ -74,7 +75,7 @@ For frontend work, run `npm run dev` in `web/` while `airspace serve` is running
 
 What the dashboard does:
 
-- **Map:** north-up dark map (Mapbox Standard or classic style; overlays set emissive strength so night lighting doesn't dim them) with mile rings, the visible boundary and the collection limit. Symbols are rotated by ground track. Helicopters get an amber rotor symbol only when the classifier says rotorcraft, and aircraft without a track get an unrotated symbol. Labels show altitude in hundreds of feet (`015` means 1,500 ft barometric).
+- **Map:** a north-up radar-scope look. `dark-v11` is recolored to dim greens with POI, transit and shield clutter hidden. Aircraft and rings are phosphor green, helicopters amber, and the selection and home point cyan. Trails fade like a phosphor afterglow. The palette lives in `web/src/lib/theme.ts` and as CSS variables in `App.svelte`. Overlays set emissive strength so Mapbox Standard styles' night lighting doesn't dim them. The map has mile rings, the visible boundary and the collection limit. Symbols are rotated by ground track. Helicopters get an amber rotor symbol only when the classifier says rotorcraft, and aircraft without a track get an unrotated symbol. Labels show altitude in hundreds of feet (`015` means 1,500 ft barometric).
 - **Updates:** the browser reads `/api/state` every two seconds. That never triggers provider requests. Map layers are created once; each update only replaces source data.
 - **Filters:** altitude presets, unknown altitude (shown by default), on-ground aircraft and surface vehicles (hidden by default, to keep LAX traffic out of the way), and list-only-within-visible-radius. Filters run in the browser.
 - **Freshness:** positions keep aging on the browser's clock between updates. If the local server stops responding, markers fade and then disappear instead of freezing.

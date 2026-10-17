@@ -4,7 +4,9 @@
   import { onDestroy, onMount } from 'svelte';
   import { aircraftCollection, circle, rings, trailCollection } from '../lib/geo';
   import { drawIcon, ICON_NAMES, ICON_PIXEL_RATIO } from '../lib/icons';
+  import { radarizeBasemap } from '../lib/basemap';
   import { FALLBACK_FONT, MAPBOX_STYLE, MAPBOX_TOKEN } from '../lib/config';
+  import { SCOPE } from '../lib/theme';
   import type { Aircraft, LonLat, Snapshot } from '../lib/types';
 
   interface Props {
@@ -18,24 +20,16 @@
 
   const TOKEN = MAPBOX_TOKEN;
 
-  const COLORS = {
-    rotorcraft: '#ffb020',
-    aircraft: '#e6edf2',
-    unknown: '#9aa6af',
-    surface: '#6b7780',
-    selected: '#46c2ff',
-  };
-
   const kindColor: mapboxgl.ExpressionSpecification = [
     'match',
     ['get', 'kind'],
     ['rotorcraft', 'gyroplane'],
-    COLORS.rotorcraft,
+    SCOPE.amber,
     'surface',
-    COLORS.surface,
+    SCOPE.surface,
     'unknown',
-    COLORS.unknown,
-    COLORS.aircraft,
+    SCOPE.unknown,
+    SCOPE.phosphor,
   ];
   const freshnessOpacity: mapboxgl.ExpressionSpecification = ['match', ['get', 'freshness'], 'fading', 0.4, 'unknown', 0.75, 1];
 
@@ -73,7 +67,14 @@
 
   // Mapbox Standard styles light the map; emissive strength 1 keeps overlays at their true colors
   // under night presets (classic styles ignore it)
+  /** Afterglow: transparent at the oldest point, bright at the aircraft. Needs lineMetrics. */
+  function glow(hex: string, peak: number): mapboxgl.ExpressionSpecification {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    return ['interpolate', ['linear'], ['line-progress'], 0, `rgba(${r},${g},${b},0)`, 1, `rgba(${r},${g},${b},${peak})`];
+  }
+
   function addLayers(m: mapboxgl.Map) {
+    radarizeBasemap(m);
     const FONT = styleFont(m);
     for (const name of ICON_NAMES) {
       const image = drawIcon(name);
@@ -81,7 +82,7 @@
     }
     const empty = { type: 'FeatureCollection' as const, features: [] };
     m.addSource('rings', { type: 'geojson', data: empty });
-    m.addSource('trails', { type: 'geojson', data: empty });
+    m.addSource('trails', { type: 'geojson', data: empty, lineMetrics: true });
     m.addSource('aircraft', { type: 'geojson', data: empty, promoteId: 'id' });
 
     m.addLayer({
@@ -90,9 +91,9 @@
       source: 'rings',
       filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'collection']],
       paint: {
-        'line-color': ['match', ['get', 'kind'], 'visible', '#a3afb7', '#5f6c75'],
-        'line-width': ['match', ['get', 'kind'], 'visible', 1.5, 1],
-        'line-opacity': 0.85,
+        'line-color': ['match', ['get', 'kind'], 'visible', SCOPE.phosphor, SCOPE.ring],
+        'line-width': ['match', ['get', 'kind'], 'visible', 1.25, 1],
+        'line-opacity': ['match', ['get', 'kind'], 'visible', 0.55, 0.7],
         'line-emissive-strength': 1,
       },
     });
@@ -102,10 +103,10 @@
       source: 'rings',
       filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'collection']],
       paint: {
-        'line-color': '#5f6c75',
+        'line-color': SCOPE.ring,
         'line-width': 1,
         'line-dasharray': [2, 3],
-        'line-opacity': 0.7,
+        'line-opacity': 0.6,
         'line-emissive-strength': 1,
       },
     });
@@ -115,7 +116,12 @@
       source: 'rings',
       filter: ['all', ['==', ['geometry-type'], 'Point'], ['!=', ['get', 'kind'], 'home']],
       layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 11, 'text-offset': [0, -0.7] },
-      paint: { 'text-color': '#8d99a2', 'text-halo-color': '#111', 'text-halo-width': 1, 'text-emissive-strength': 1 },
+      paint: {
+        'text-color': SCOPE.ringLabel,
+        'text-halo-color': SCOPE.halo,
+        'text-halo-width': 1,
+        'text-emissive-strength': 1,
+      },
     });
     m.addLayer({
       id: 'home',
@@ -124,24 +130,34 @@
       filter: ['==', ['get', 'kind'], 'home'],
       paint: {
         'circle-radius': 4,
-        'circle-color': '#46c2ff',
-        'circle-stroke-color': '#0d1114',
+        'circle-color': SCOPE.accent,
+        'circle-stroke-color': SCOPE.halo,
         'circle-stroke-width': 2,
         'circle-emissive-strength': 1,
       },
     });
-    m.addLayer({
-      id: 'trails',
-      type: 'line',
-      source: 'trails',
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: {
-        'line-color': ['case', ['get', 'selected'], COLORS.selected, kindColor],
-        'line-width': ['case', ['get', 'selected'], 2.5, 1.5],
-        'line-opacity': ['*', ['case', ['get', 'selected'], 0.9, 0.5], freshnessOpacity],
-        'line-emissive-strength': 1,
-      },
-    });
+    // line-gradient can't vary by feature, so each trail color gets its own layer
+    const helicopter: mapboxgl.ExpressionSpecification = ['match', ['get', 'kind'], ['rotorcraft', 'gyroplane'], true, false];
+    const trailLayers: [string, mapboxgl.ExpressionSpecification, string, number, number][] = [
+      ['trails', ['all', ['!', ['get', 'selected']], ['!', helicopter]], SCOPE.phosphor, 0.7, 1.5],
+      ['trails-heli', ['all', ['!', ['get', 'selected']], helicopter], SCOPE.amber, 0.8, 1.75],
+      ['trails-selected', ['get', 'selected'], SCOPE.accent, 1, 2.5],
+    ];
+    for (const [id, filter, color, peak, width] of trailLayers) {
+      m.addLayer({
+        id,
+        type: 'line',
+        source: 'trails',
+        filter,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-gradient': glow(color, peak),
+          'line-width': width,
+          'line-opacity': freshnessOpacity,
+          'line-emissive-strength': 1,
+        },
+      });
+    }
     m.addLayer({
       id: 'selection',
       type: 'circle',
@@ -150,7 +166,7 @@
       paint: {
         'circle-radius': 17,
         'circle-color': 'transparent',
-        'circle-stroke-color': COLORS.selected,
+        'circle-stroke-color': SCOPE.accent,
         'circle-stroke-width': 2,
         'circle-emissive-strength': 1,
       },
@@ -176,11 +192,11 @@
         'text-optional': true,
       },
       paint: {
-        'icon-color': ['case', ['get', 'selected'], COLORS.selected, kindColor],
+        'icon-color': ['case', ['get', 'selected'], SCOPE.accent, kindColor],
         'icon-opacity': freshnessOpacity,
-        'text-color': ['case', ['get', 'selected'], COLORS.selected, '#cfd8de'],
+        'text-color': ['case', ['get', 'selected'], SCOPE.accent, helicopter, SCOPE.amber, SCOPE.phosphorText],
         'text-opacity': freshnessOpacity,
-        'text-halo-color': '#0d1114',
+        'text-halo-color': SCOPE.halo,
         'text-halo-width': 1.2,
         'icon-emissive-strength': 1,
         'text-emissive-strength': 1,
@@ -256,7 +272,7 @@
     position: relative;
     width: 100%;
     height: 100%;
-    background: #0d1114;
+    background: var(--bg);
   }
   .map {
     position: absolute;
@@ -267,23 +283,23 @@
     top: 10px;
     left: 10px;
     padding: 6px 10px;
-    border: 1px solid #36424a;
+    border: 1px solid var(--control-line);
     border-radius: 4px;
     background: rgba(17, 22, 26, 0.9);
-    color: #dbe3e8;
+    color: var(--text);
     font: inherit;
     font-size: 13px;
     cursor: pointer;
   }
   .recenter:hover {
-    border-color: #5d6b74;
+    border-color: var(--control-line-hover);
   }
   .no-token {
     display: grid;
     place-items: center;
     height: 100%;
     padding: 24px;
-    color: #c3ccd2;
+    color: var(--text-soft);
     text-align: center;
   }
 </style>

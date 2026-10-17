@@ -53,20 +53,20 @@
     width: 100%;
     padding: 8px 12px;
     border: 0;
-    border-bottom: 1px solid #1b2227;
+    border-bottom: 1px solid var(--line-soft);
     background: none;
-    color: #e6edf2;
+    color: var(--text);
     font: inherit;
     font-size: 13px;
     text-align: left;
     cursor: pointer;
   }
   button:hover {
-    background: #161d22;
+    background: var(--hover);
   }
   button.selected {
-    background: #12303f;
-    box-shadow: inset 3px 0 #46c2ff;
+    background: var(--selected-bg);
+    box-shadow: inset 3px 0 var(--accent);
   }
   button.fading {
     opacity: 0.55;
@@ -77,18 +77,23 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #e6edf2;
+    background: var(--phosphor);
   }
   .kind.rotorcraft,
   .kind.gyroplane {
-    background: #ffb020;
+    background: var(--amber);
   }
   .kind.unknown {
-    background: #9aa6af;
+    background: var(--unknown);
   }
   .kind.surface {
     border-radius: 1px;
-    background: #6b7780;
+    background: var(--surface);
+  }
+  .name strong {
+    font-family: var(--mono);
+    font-weight: 500;
+    letter-spacing: 0.02em;
   }
   .name {
     grid-area: name;
@@ -98,7 +103,7 @@
   }
   .type {
     overflow: hidden;
-    color: #8d99a2;
+    color: var(--muted);
     font-size: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -110,7 +115,7 @@
   }
   .dist {
     grid-area: dist;
-    color: #8d99a2;
+    color: var(--muted);
     font-size: 12px;
     text-align: right;
     font-variant-numeric: tabular-nums;
@@ -118,7 +123,7 @@
   .empty {
     margin: 0;
     padding: 16px 12px;
-    color: #aab5bc;
+    color: var(--muted-strong);
     font-size: 13px;
   }
 </style>
