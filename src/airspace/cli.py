@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import signal
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -232,3 +233,62 @@ def replay(
         f"Try http://127.0.0.1:{port}/api/replay?session_id={session_id}&at={_url_time(end)}"
     )
     _serve(config, "replay", port)
+
+
+@app.command()
+def export(
+    config_file: ConfigOption = None,
+    session: Annotated[str, typer.Option(help="Session ID or 'latest'")] = "latest",
+    format: Annotated[str, typer.Option(help="geojson, json or flighttracer")] = "geojson",
+    geometry: Annotated[str, typer.Option(help="For geojson: tracks or points")] = "tracks",
+    aircraft: Annotated[list[str] | None, typer.Option(help="Aircraft ID (ICAO hex); repeatable")] = None,
+    start: Annotated[str | None, typer.Option(help="ISO 8601 receipt time")] = None,
+    end: Annotated[str | None, typer.Option(help="ISO 8601 receipt time")] = None,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="File, or folder for flighttracer")] = None,
+) -> None:
+    """Export recorded data with provenance (home coordinates are never included)."""
+    from airspace import export as export_mod
+    from airspace.replay import RegistryCache
+
+    config = _load(config_file)
+    if format not in ("geojson", "json", "flighttracer"):
+        raise typer.BadParameter("format must be geojson, json or flighttracer")
+    try:
+        store = Store(config.storage.data_dir, read_only=True)
+        session_id = store.resolve_session(session)
+    except (FileNotFoundError, LookupError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from None
+    window = {
+        "start": datetime.fromisoformat(start.replace("Z", "+00:00")) if start else None,
+        "end": datetime.fromisoformat(end.replace("Z", "+00:00")) if end else None,
+    }
+    cache = RegistryCache(HangarbayRegistry.open_optional(config.enrich.hangarbay_db))
+    try:
+        if format == "flighttracer":
+            if not aircraft or len(aircraft) != 1:
+                raise typer.BadParameter("flighttracer export needs exactly one --aircraft")
+            folder = output or Path(f"airspace-{aircraft[0].lower()}-session-{session_id}")
+            try:
+                meta = export_mod.to_flighttracer(store, session_id, config, folder, aircraft[0], **window)
+            except LookupError as exc:
+                typer.echo(str(exc), err=True)
+                raise typer.Exit(1) from None
+            typer.echo(f"Wrote {meta['points']} positions to {folder}/trace.csv. Run: flight-tracer render {folder}")
+            return
+        if format == "json":
+            body = export_mod.to_json(store, session_id, config, cache, aircraft=aircraft, **window)
+            count = len(body["observations"])
+        else:
+            body = export_mod.to_geojson(
+                store, session_id, config, cache, geometry=geometry, aircraft=aircraft, **window
+            )
+            count = len(body["features"])
+    finally:
+        if cache.registry:
+            cache.registry.close()
+        store.close()
+    suffix = "json" if format == "json" else f"{geometry}.geojson"
+    path = output or Path(f"airspace-session-{session_id}-{suffix}")
+    path.write_text(json.dumps(body, indent=1))
+    typer.echo(f"Wrote {count} {'observations' if format == 'json' else 'features'} to {path}")

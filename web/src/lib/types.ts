@@ -95,3 +95,24 @@ export interface Snapshot {
 }
 
 export const SUPPORTED_SNAPSHOT_VERSION = 1;
+
+export interface SessionInfo {
+  id: number;
+  provider: string;
+  mode: string;
+  started_at: string;
+  ended_at: string | null;
+  end_reason: string | null;
+  polls: number;
+  first_poll_at: string | null;
+  last_poll_at: string | null;
+}
+
+/** Per-poll outcomes for the replay scrubber; times are epoch milliseconds. */
+export interface Timeline {
+  session_id: number;
+  start: number | null;
+  end: number | null;
+  polls: { t: number[]; ok: boolean[]; aircraft: number[]; rotorcraft: number[] };
+  gaps: { kind: string; start: number; end: number }[];
+}

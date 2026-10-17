@@ -96,6 +96,19 @@ class FeedTracker:
         }
 
 
+def breaks_between(
+    a_at: datetime, a_lat: float, a_lon: float, b_at: datetime, b_lat: float, b_lon: float, trail_gap_s: float
+) -> bool:
+    """A coverage gap or an implausible jump separates two consecutive positions."""
+    seconds = (b_at - a_at).total_seconds()
+    if seconds > trail_gap_s:
+        return True
+    if seconds <= 0:
+        return False
+    _, meters = bearing_distance(a_lat, a_lon, b_lat, b_lon)
+    return meters / METERS_PER_NM / (seconds / 3600) > MAX_IMPLIED_SPEED_KT
+
+
 def position_age_s(obs: Observation, now: datetime) -> float | None:
     """Age at `now`: age reported at the response plus time since local receipt.
 
@@ -187,14 +200,10 @@ class StateBuilder:
         )
 
     def _breaks(self, a: TrailPoint, b: TrailPoint) -> bool:
-        """A coverage gap or an implausible jump separates two positions."""
-        seconds = (b.position_at - a.position_at).total_seconds()
-        if seconds > self.config.freshness.trail_gap_s:
-            return True
-        if seconds <= 0:
-            return False
-        _, meters = bearing_distance(a.latitude, a.longitude, b.latitude, b.longitude)
-        return meters / METERS_PER_NM / (seconds / 3600) > MAX_IMPLIED_SPEED_KT
+        return breaks_between(
+            a.position_at, a.latitude, a.longitude, b.position_at, b.latitude, b.longitude,
+            self.config.freshness.trail_gap_s,
+        )
 
     def _prune(self, now: datetime) -> None:
         trail_cutoff = now - timedelta(seconds=self.config.freshness.trail_duration_s)

@@ -20,10 +20,11 @@
     aircraft: Aircraft | null;
     lastSeen: LastSeen | null;
     hiddenByFilters: boolean;
+    exportHref?: string | null;
     onclose: () => void;
   }
 
-  let { aircraft, lastSeen, hiddenByFilters, onclose }: Props = $props();
+  let { aircraft, lastSeen, hiddenByFilters, exportHref = null, onclose }: Props = $props();
 
   const FRESHNESS: Record<string, string> = {
     fresh: 'Current',
@@ -79,6 +80,9 @@
       <dd>{clock(a.last_received_at)}</dd>
     </dl>
     <p class="caveat">Barometric altitude is not height above ground. Ground track is not necessarily heading.</p>
+    {#if exportHref}
+      <a class="export" href={exportHref} download>Export this aircraft's tracks (GeoJSON)</a>
+    {/if}
   </section>
 {:else if lastSeen}
   <section class="detail" aria-label="Selected aircraft" data-testid="detail">
@@ -148,6 +152,12 @@
   }
   .note.alert {
     color: #ff8a8a;
+  }
+  .export {
+    display: inline-block;
+    margin-top: 8px;
+    color: #46c2ff;
+    font-size: 12px;
   }
   .caveat {
     margin: 10px 0 0;

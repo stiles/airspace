@@ -1,14 +1,16 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import AircraftList from './components/AircraftList.svelte';
   import DetailPanel from './components/DetailPanel.svelte';
   import FeedStatus from './components/FeedStatus.svelte';
   import FiltersPanel from './components/Filters.svelte';
   import MapView from './components/Map.svelte';
-  import { ApiError, replayTarget, startPolling } from './lib/api';
+  import Timeline from './components/Timeline.svelte';
+  import { ApiError, exportUrl, replayTarget, startPolling } from './lib/api';
   import { applyFilters, defaultFilters, passes, type Filters } from './lib/filters';
   import { miles } from './lib/format';
   import { ageAircraft } from './lib/freshness';
+  import { ReplayController } from './lib/replay.svelte';
   import { emptyListMessage, statusView } from './lib/status';
   import type { Snapshot } from './lib/types';
 
@@ -16,22 +18,34 @@
     fetchFn?: typeof fetch;
     pollMs?: number;
     tickMs?: number;
+    replayTickMs?: number;
   }
 
-  let { fetchFn = (...args) => fetch(...args), pollMs, tickMs = 1000 }: Props = $props();
+  let { fetchFn = (...args) => fetch(...args), pollMs, tickMs = 1000, replayTickMs }: Props = $props();
 
-  const replay = replayTarget(window.location.search);
+  type Mode = 'live' | 'replay';
+  let mode = $state<Mode>('live');
+  // Set when the server runs `airspace replay`: no live state to switch back to
+  let replayOnly = $state(false);
 
-  let snapshot = $state<Snapshot | null>(null);
-  let error = $state<ApiError | null>(null);
+  let liveSnapshot = $state<Snapshot | null>(null);
+  let liveError = $state<ApiError | null>(null);
   let fetchedAt = $state(0);
   let now = $state(Date.now());
   let selectedId = $state<string | null>(null);
   let filters = $state<Filters>(defaultFilters());
   let filtersInitialized = false;
 
-  // Seconds since the snapshot arrived; replay is a fixed moment and doesn't age
-  const elapsedS = $derived(snapshot && !replay ? Math.max(0, (now - fetchedAt) / 1000) : 0);
+  const replay = new ReplayController({
+    fetchFn: (...args) => fetchFn(...args),
+    tickMs: untrack(() => replayTickMs),
+    onLocation: (sessionId, at) => setLocation({ session: String(sessionId), at }),
+  });
+
+  const snapshot = $derived(mode === 'live' ? liveSnapshot : replay.snapshot);
+  const error = $derived(mode === 'live' ? liveError : replay.error);
+  // Seconds since the live snapshot arrived; a replayed moment doesn't age
+  const elapsedS = $derived(mode === 'live' && snapshot ? Math.max(0, (now - fetchedAt) / 1000) : 0);
   const aged = $derived(snapshot ? ageAircraft(snapshot.aircraft, elapsedS, snapshot.thresholds) : []);
   const view = $derived(statusView(snapshot, error, elapsedS));
   const onMap = $derived(applyFilters(aged, filters));
@@ -44,41 +58,103 @@
   );
   const visibleLabel = $derived(snapshot ? miles(snapshot.area.visible_radius_m) : 'visible area');
   const attribution = $derived(snapshot?.source);
+  const sessionId = $derived(mode === 'live' ? (liveSnapshot?.session_id ?? null) : replay.sessionId);
 
-  let stop: (() => void) | undefined;
+  let stopLive: (() => void) | undefined;
   let ticker: ReturnType<typeof setInterval> | undefined;
 
-  onMount(() => {
-    stop = startPolling(
+  function setLocation(params: Record<string, string> | null) {
+    const url = new URL(window.location.href);
+    url.search = params ? `?${new URLSearchParams(params)}` : '';
+    window.history.replaceState(null, '', url);
+  }
+
+  function onSnapshot(s: Snapshot) {
+    if (!filtersInitialized) {
+      filters.maxAltitudeFt = s.area.max_altitude_baro_ft;
+      filtersInitialized = true;
+    }
+  }
+
+  function startLive() {
+    stopLive?.();
+    stopLive = startPolling(
       (s) => {
-        snapshot = s;
+        liveSnapshot = s;
         fetchedAt = Date.now();
         now = fetchedAt;
-        error = null;
-        if (!filtersInitialized) {
-          filters.maxAltitudeFt = s.area.max_altitude_baro_ft;
-          filtersInitialized = true;
-        }
+        liveError = null;
+        onSnapshot(s);
       },
-      (e) => (error = e),
-      { replay, fetchFn, ...(pollMs ? { intervalMs: pollMs } : {}) },
+      (e) => {
+        if (e.status === 409) {
+          // The server is in replay mode
+          replayOnly = true;
+          enterReplay();
+          return;
+        }
+        liveError = e;
+      },
+      { fetchFn, ...(pollMs ? { intervalMs: pollMs } : {}) },
     );
+  }
+
+  function enterReplay(sessionId?: number | null, at?: number | null) {
+    stopLive?.();
+    stopLive = undefined;
+    mode = 'replay';
+    replay.open(sessionId ?? liveSnapshot?.session_id ?? null, at ?? null);
+  }
+
+  function enterLive() {
+    if (replayOnly) return;
+    replay.pause();
+    mode = 'live';
+    setLocation(null);
+    startLive();
+  }
+
+  $effect(() => {
+    if (replay.snapshot) onSnapshot(replay.snapshot);
+  });
+
+  onMount(() => {
+    const target = replayTarget(window.location.search);
+    if (target) enterReplay(target.sessionId, Date.parse(target.at));
+    else startLive();
     ticker = setInterval(() => (now = Date.now()), tickMs);
   });
 
   onDestroy(() => {
-    stop?.();
+    stopLive?.();
+    replay.close();
     clearInterval(ticker);
   });
 
   function select(id: string | null) {
     selectedId = id;
   }
+
+  function keydown(e: KeyboardEvent) {
+    if (mode !== 'replay' || e.key !== ' ') return;
+    const tag = (e.target as HTMLElement | null)?.tagName;
+    if (tag && ['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA', 'SUMMARY', 'A'].includes(tag)) return;
+    e.preventDefault();
+    replay.toggle();
+  }
 </script>
+
+<svelte:window onkeydown={keydown} />
 
 <div class="app">
   <header class="bar">
     <h1>Airspace</h1>
+    {#if !replayOnly}
+      <div class="modes" role="group" aria-label="Mode">
+        <button type="button" aria-pressed={mode === 'live'} onclick={enterLive}>Live</button>
+        <button type="button" aria-pressed={mode === 'replay'} onclick={() => mode !== 'replay' && enterReplay()}>Replay</button>
+      </div>
+    {/if}
     <FeedStatus {view} />
     {#if snapshot && !view.untrusted}
       <span class="count" data-testid="count">
@@ -88,8 +164,13 @@
   </header>
 
   <main>
-    <div class="map-pane" class:untrusted={view.untrusted}>
-      <MapView aircraft={onMap} area={snapshot?.area ?? null} {selectedId} onselect={select} />
+    <div class="map-column">
+      <div class="map-pane" class:untrusted={view.untrusted}>
+        <MapView aircraft={onMap} area={snapshot?.area ?? null} {selectedId} onselect={select} />
+      </div>
+      {#if mode === 'replay'}
+        <Timeline {replay} />
+      {/if}
     </div>
     <aside>
       <FiltersPanel bind:filters {visibleLabel} />
@@ -97,6 +178,7 @@
         aircraft={selected}
         lastSeen={selectedLastSeen}
         hiddenByFilters={selected !== null && !passes(selected, filters)}
+        exportHref={sessionId !== null && selectedId ? exportUrl(sessionId, { aircraft: selectedId }) : null}
         onclose={() => select(null)}
       />
       <div class="list-wrap">
@@ -126,7 +208,7 @@
     margin: 0;
     background: #0d1114;
     color: #e6edf2;
-    font-family: Roboto, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
   }
   :global(#app) {
     height: 100%;
@@ -167,10 +249,36 @@
     flex: 1;
     min-height: 0;
   }
+  .map-column {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
   .map-pane {
     position: relative;
     flex: 1;
-    min-width: 0;
+    min-height: 0;
+  }
+  .modes {
+    display: flex;
+    flex: none;
+    border: 1px solid #36424a;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .modes button {
+    padding: 4px 10px;
+    border: 0;
+    background: #161c20;
+    color: #aab5bc;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .modes button[aria-pressed='true'] {
+    background: #12303f;
+    color: #e6edf2;
   }
   /* When data isn't current, mute the map so it can't pass for live */
   .map-pane.untrusted {
@@ -200,9 +308,9 @@
     main {
       flex-direction: column;
     }
-    .map-pane {
+    .map-column {
       flex: none;
-      height: 55vh;
+      height: 60vh;
     }
     aside {
       flex: 1;

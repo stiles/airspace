@@ -4,7 +4,7 @@ A local tracker for aircraft flying near a home point, with attention to helicop
 
 ![Airspace dashboard: a dark map of West Los Angeles with mile rings, aircraft symbols and trails, an LAPD helicopter in amber, and a list of nearby aircraft](img/airspace_example.png)
 
-Milestones 1 through 3 are built: a headless collector, a coverage report, a local state service and API, and a Mapbox dashboard. Replay controls and exports (milestone 4) come next.
+Milestones 1 through 4 are built: a headless collector, a coverage report, a local state service and API, a Mapbox dashboard, and replay with exports. Milestone 5, an eight-hour soak test and a decision on continuous operation, comes next.
 
 ## Setup
 
@@ -55,6 +55,8 @@ The dashboard is Svelte 5, TypeScript, Vite and Mapbox GL JS, in `web/`. It need
 
 ```bash
 VITE_MAPBOX_TOKEN=pk....
+# Optional. The default style belongs to the stiles Mapbox account, so other accounts should set this:
+VITE_MAPBOX_STYLE=mapbox://styles/mapbox/dark-v11
 ```
 
 Vite builds the token into the bundle, and `web/dist/` is gitignored too. Then:
@@ -66,11 +68,13 @@ uv run airspace serve        # dashboard at http://127.0.0.1:8000
 
 For frontend work, run `npm run dev` in `web/` while `airspace serve` is running. The dev server at http://127.0.0.1:5173 forwards `/api` to port 8000.
 
-To view a recorded moment, run `airspace replay` and open `/?session=<id>&at=<ISO time>`. A timeline is part of milestone 4.
+**Replay:** use the Live/Replay switch in the header, or run `airspace replay` for recorded data only. The timeline bar shows every poll: green when it succeeded, red when it failed, hatched while the collector was asleep, with an amber strip when an ADS-B category A7 helicopter was in the feed. Drag or click to seek. The controls are play/pause (space), previous/next poll (← →), 1×–60× speed and a session picker. The URL keeps `?session=&at=`, so a moment can be bookmarked. Replay reads only records received by the playhead time.
+
+**Exports:** tracks, points or observations for a session from the replay bar, or one aircraft's tracks from the detail panel. See [docs/exports.md](docs/exports.md), which also covers the FlightTracer run-folder export.
 
 What the dashboard does:
 
-- **Map:** north-up dark map with mile rings, the visible boundary and the collection limit. Symbols are rotated by ground track. Helicopters get an amber rotor symbol only when the classifier says rotorcraft, and aircraft without a track get an unrotated symbol. Labels show altitude in hundreds of feet (`015` means 1,500 ft barometric).
+- **Map:** north-up dark map (Mapbox Standard or classic style; overlays set emissive strength so night lighting doesn't dim them) with mile rings, the visible boundary and the collection limit. Symbols are rotated by ground track. Helicopters get an amber rotor symbol only when the classifier says rotorcraft, and aircraft without a track get an unrotated symbol. Labels show altitude in hundreds of feet (`015` means 1,500 ft barometric).
 - **Updates:** the browser reads `/api/state` every two seconds. That never triggers provider requests. Map layers are created once; each update only replaces source data.
 - **Filters:** altitude presets, unknown altitude (shown by default), on-ground aircraft and surface vehicles (hidden by default, to keep LAX traffic out of the way), and list-only-within-visible-radius. Filters run in the browser.
 - **Freshness:** positions keep aging on the browser's clock between updates. If the local server stops responding, markers fade and then disappear instead of freezing.

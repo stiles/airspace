@@ -213,3 +213,99 @@ describe('App', () => {
     expect(screen.getByTestId('feed-status')).toHaveTextContent('airspace serve');
   });
 });
+
+describe('Replay mode', () => {
+  const T = Date.parse('2026-10-17T20:00:00Z');
+  const tl = {
+    session_id: 1, start: T, end: T + 30_000,
+    polls: { t: [T, T + 10_000, T + 20_000, T + 30_000], ok: [true, true, true, true], aircraft: [1, 1, 1, 1], rotorcraft: [1, 1, 1, 1] },
+    gaps: [],
+  };
+  const sessions = [{ id: 1, provider: 'adsbfi', mode: 'collect', started_at: '', ended_at: null, end_reason: null,
+                      polls: 4, first_poll_at: null, last_poll_at: null }];
+
+  function router(liveStatus = 200) {
+    const calls: string[] = [];
+    const fn = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost');
+      calls.push(url.pathname + url.search);
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+      if (url.pathname === '/api/state') {
+        return liveStatus === 200 ? json(snapshot({ session_id: 1 })) : json({ detail: 'replay mode' }, liveStatus);
+      }
+      if (url.pathname === '/api/sessions') return json(sessions);
+      if (url.pathname === '/api/sessions/1/timeline') return json(tl);
+      if (url.pathname === '/api/replay') {
+        const at = url.searchParams.get('at')!;
+        return json(snapshot({ mode: 'replay', replay: { session_id: 1, at, session_start: null, session_end: null } }));
+      }
+      return json({ detail: 'not found' }, 404);
+    });
+    return { fetchFn: fn as unknown as typeof fetch, calls };
+  }
+
+  afterEach(() => window.history.replaceState(null, '', '/'));
+
+  it('switches to replay automatically when the server is in replay mode', async () => {
+    const { fetchFn, calls } = router(409);
+    render(App, { fetchFn, pollMs: POLL });
+    await advance(0);
+    await advance(0);
+    expect(screen.getByTestId('timeline')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Live' })).toBeNull();
+    expect(screen.getByTestId('feed-status')).toHaveTextContent('Replay: live');
+    expect(calls.filter((c) => c.startsWith('/api/state'))).toHaveLength(1); // stops polling live state
+    expect(window.location.search).toContain('session=1');
+  });
+
+  it('toggles between live and replay, plays with the keyboard and syncs the URL', async () => {
+    const { fetchFn, calls } = router();
+    render(App, { fetchFn, pollMs: POLL, replayTickMs: 250 });
+    await advance(0);
+    expect(screen.queryByTestId('timeline')).toBeNull();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Replay' }));
+    await advance(0);
+    await advance(0);
+    expect(screen.getByTestId('timeline')).toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get('at')).toBe('2026-10-17T20:00:30.000Z');
+    const liveCalls = calls.filter((c) => c === '/api/state').length;
+
+    // Space restarts from the beginning, since the playhead is at the end
+    await fireEvent.keyDown(window, { key: ' ' });
+    expect(screen.getByTestId('play')).toHaveAttribute('aria-label', 'Pause');
+    await advance(1000);
+    await fireEvent.keyDown(window, { key: ' ' });
+    expect(screen.getByTestId('play')).toHaveAttribute('aria-label', 'Play');
+    expect(new URLSearchParams(window.location.search).get('at')).toBe('2026-10-17T20:00:16.000Z');
+    expect(calls.filter((c) => c === '/api/state').length).toBe(liveCalls); // no live polling while replaying
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Live' }));
+    await advance(0);
+    expect(screen.queryByTestId('timeline')).toBeNull();
+    expect(window.location.search).toBe('');
+    expect(calls.filter((c) => c === '/api/state').length).toBeGreaterThan(liveCalls);
+  });
+
+  it('opens a replay link at the requested moment', async () => {
+    window.history.replaceState(null, '', '/?session=1&at=2026-10-17T20:00:10Z');
+    const { fetchFn, calls } = router();
+    render(App, { fetchFn, pollMs: POLL });
+    await advance(0);
+    await advance(0);
+    expect(calls).toContain('/api/replay?session_id=1&at=2026-10-17T20%3A00%3A10.000Z');
+    expect(calls.some((c) => c === '/api/state')).toBe(false);
+    expect(screen.getByTestId('scrubber')).toHaveAttribute('aria-valuenow', String(T + 10_000));
+  });
+
+  it('labels use the style font and the detail panel links to an export', async () => {
+    const { fetchFn } = router();
+    render(App, { fetchFn, pollMs: POLL });
+    await advance(0);
+    const aircraftLayer = map().layerSpecs.find((l) => l.id === 'aircraft');
+    expect(aircraftLayer?.layout?.['text-font']).toEqual(['Inter Medium', 'Arial Unicode MS Regular']);
+    await fireEvent.click(screen.getByRole('button', { name: /N225LA/ }));
+    const link = screen.getByRole('link', { name: /Export this aircraft/ });
+    expect(link).toHaveAttribute('href', '/api/sessions/1/export?format=geojson&geometry=tracks&aircraft=a1f48f');
+  });
+});

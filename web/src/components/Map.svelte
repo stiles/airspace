@@ -4,6 +4,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { aircraftCollection, circle, rings, trailCollection } from '../lib/geo';
   import { drawIcon, ICON_NAMES, ICON_PIXEL_RATIO } from '../lib/icons';
+  import { FALLBACK_FONT, MAPBOX_STYLE, MAPBOX_TOKEN } from '../lib/config';
   import type { Aircraft, LonLat, Snapshot } from '../lib/types';
 
   interface Props {
@@ -15,9 +16,7 @@
 
   let { aircraft, area, selectedId, onselect }: Props = $props();
 
-  const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
-  const STYLE = 'mapbox://styles/mapbox/dark-v11';
-  const FONT = ['Roboto Medium', 'Arial Unicode MS Regular'];
+  const TOKEN = MAPBOX_TOKEN;
 
   const COLORS = {
     rotorcraft: '#ffb020',
@@ -63,7 +62,19 @@
     if (map && area) map.fitBounds(visibleBounds(area), { padding: 24, duration: 600 });
   }
 
+  /** Borrow a font stack from the style's own labels, so glyph requests always resolve. */
+  function styleFont(m: mapboxgl.Map): string[] {
+    for (const layer of m.getStyle()?.layers ?? []) {
+      const font = layer.type === 'symbol' ? layer.layout?.['text-font'] : undefined;
+      if (Array.isArray(font) && font.every((f) => typeof f === 'string')) return font as string[];
+    }
+    return FALLBACK_FONT;
+  }
+
+  // Mapbox Standard styles light the map; emissive strength 1 keeps overlays at their true colors
+  // under night presets (classic styles ignore it)
   function addLayers(m: mapboxgl.Map) {
+    const FONT = styleFont(m);
     for (const name of ICON_NAMES) {
       const image = drawIcon(name);
       if (image && !m.hasImage(name)) m.addImage(name, image, { sdf: true, pixelRatio: ICON_PIXEL_RATIO });
@@ -79,9 +90,10 @@
       source: 'rings',
       filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'collection']],
       paint: {
-        'line-color': ['match', ['get', 'kind'], 'visible', '#7f8c95', '#4a555d'],
+        'line-color': ['match', ['get', 'kind'], 'visible', '#a3afb7', '#5f6c75'],
         'line-width': ['match', ['get', 'kind'], 'visible', 1.5, 1],
-        'line-opacity': 0.8,
+        'line-opacity': 0.85,
+        'line-emissive-strength': 1,
       },
     });
     m.addLayer({
@@ -89,7 +101,13 @@
       type: 'line',
       source: 'rings',
       filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'collection']],
-      paint: { 'line-color': '#4a555d', 'line-width': 1, 'line-dasharray': [2, 3], 'line-opacity': 0.6 },
+      paint: {
+        'line-color': '#5f6c75',
+        'line-width': 1,
+        'line-dasharray': [2, 3],
+        'line-opacity': 0.7,
+        'line-emissive-strength': 1,
+      },
     });
     m.addLayer({
       id: 'ring-labels',
@@ -97,14 +115,20 @@
       source: 'rings',
       filter: ['all', ['==', ['geometry-type'], 'Point'], ['!=', ['get', 'kind'], 'home']],
       layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 11, 'text-offset': [0, -0.7] },
-      paint: { 'text-color': '#8d99a2', 'text-halo-color': '#111', 'text-halo-width': 1 },
+      paint: { 'text-color': '#8d99a2', 'text-halo-color': '#111', 'text-halo-width': 1, 'text-emissive-strength': 1 },
     });
     m.addLayer({
       id: 'home',
       type: 'circle',
       source: 'rings',
       filter: ['==', ['get', 'kind'], 'home'],
-      paint: { 'circle-radius': 4, 'circle-color': '#46c2ff', 'circle-stroke-color': '#0d1114', 'circle-stroke-width': 2 },
+      paint: {
+        'circle-radius': 4,
+        'circle-color': '#46c2ff',
+        'circle-stroke-color': '#0d1114',
+        'circle-stroke-width': 2,
+        'circle-emissive-strength': 1,
+      },
     });
     m.addLayer({
       id: 'trails',
@@ -114,7 +138,8 @@
       paint: {
         'line-color': ['case', ['get', 'selected'], COLORS.selected, kindColor],
         'line-width': ['case', ['get', 'selected'], 2.5, 1.5],
-        'line-opacity': ['*', ['case', ['get', 'selected'], 0.9, 0.45], freshnessOpacity],
+        'line-opacity': ['*', ['case', ['get', 'selected'], 0.9, 0.5], freshnessOpacity],
+        'line-emissive-strength': 1,
       },
     });
     m.addLayer({
@@ -127,6 +152,7 @@
         'circle-color': 'transparent',
         'circle-stroke-color': COLORS.selected,
         'circle-stroke-width': 2,
+        'circle-emissive-strength': 1,
       },
     });
     m.addLayer({
@@ -156,6 +182,8 @@
         'text-opacity': freshnessOpacity,
         'text-halo-color': '#0d1114',
         'text-halo-width': 1.2,
+        'icon-emissive-strength': 1,
+        'text-emissive-strength': 1,
       },
     });
 
@@ -173,7 +201,7 @@
     const home: LonLat = area ? [area.home.longitude, area.home.latitude] : [-118.42, 34.0];
     map = new mapboxgl.Map({
       container: container!,
-      style: STYLE,
+      style: MAPBOX_STYLE,
       center: home,
       zoom: 11,
       projection: 'mercator',

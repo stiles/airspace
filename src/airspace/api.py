@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import statistics
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -12,12 +13,14 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from airspace.collector import Clock, Collector
 from airspace.config import Config
+from airspace import export as export_mod
 from airspace.enrich import HangarbayRegistry
-from airspace.models import PollResult, utcnow
+from airspace.models import PollResult, from_iso, utcnow
 from airspace.providers import get_provider
 from airspace.providers.base import USER_AGENT
 from airspace.replay import RegistryCache, replay_state
@@ -113,8 +116,20 @@ def create_app(
     if mode not in ("live", "replay"):
         raise ValueError(mode)
 
+    class ReplayRegistry:
+        """One registry cache for replay and export requests; lookups serialized (DuckDB isn't thread-safe)."""
+
+        def __init__(self):
+            self.cache = RegistryCache(HangarbayRegistry.open_optional(config.enrich.hangarbay_db))
+            self.lock = threading.Lock()
+
+        def close(self):
+            if self.cache.registry:
+                self.cache.registry.close()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        app.state.replay_registry = ReplayRegistry()
         app.state.live = None
         if mode == "live":
             app.state.live = LiveService(config, transport=transport, clock=clock)
@@ -124,6 +139,7 @@ def create_app(
         finally:
             if app.state.live:
                 await app.state.live.shutdown()
+            app.state.replay_registry.close()
 
     app = FastAPI(title="Airspace", lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
 
@@ -206,14 +222,87 @@ def create_app(
             except LookupError as exc:
                 raise HTTPException(404, str(exc)) from None
             # A fresh builder and read-only connection; live state is untouched
-            cache = RegistryCache(HangarbayRegistry.open_optional(config.enrich.hangarbay_db))
-            try:
-                return replay_state(store, session_id, _parse_at(at), config, cache)
-            finally:
-                if cache.registry:
-                    cache.registry.close()
+            shared = app.state.replay_registry
+            with shared.lock:
+                return replay_state(store, session_id, _parse_at(at), config, shared.cache)
         finally:
             store.close()
+
+    def session_store(session_id: int) -> Store:
+        store = reader()
+        try:
+            store.resolve_session(str(session_id))
+        except LookupError as exc:
+            store.close()
+            raise HTTPException(404, str(exc)) from None
+        return store
+
+    @app.get("/api/sessions/{session_id}/timeline")
+    def timeline(session_id: int) -> dict:
+        """Per-poll outcomes for the replay scrubber. Times are epoch milliseconds (receipt, else request)."""
+        store = session_store(session_id)
+        try:
+            rows = store.conn.execute(
+                """SELECT p.kind, COALESCE(p.received_at, p.requested_at) AS t, p.error_kind, p.accepted, p.gap_s,
+                          (SELECT COUNT(*) FROM observations o WHERE o.poll_id = p.id AND o.category = 'A7') AS a7
+                   FROM polls p WHERE p.session_id = ? ORDER BY p.id""",
+                (session_id,),
+            ).fetchall()
+        finally:
+            store.close()
+
+        def ms(value: str) -> int:
+            return round(from_iso(value).timestamp() * 1000)
+
+        polls = [r for r in rows if r["kind"] == "poll"]
+        return {
+            "session_id": session_id,
+            "start": ms(polls[0]["t"]) if polls else None,
+            "end": ms(polls[-1]["t"]) if polls else None,
+            "polls": {
+                "t": [ms(r["t"]) for r in polls],
+                "ok": [r["error_kind"] is None for r in polls],
+                "aircraft": [r["accepted"] for r in polls],
+                # ADS-B category A7 only; registry-classified rotorcraft aren't counted here
+                "rotorcraft": [r["a7"] for r in polls],
+            },
+            "gaps": [
+                {"kind": r["kind"], "start": ms(r["t"]) - round((r["gap_s"] or 0) * 1000), "end": ms(r["t"])}
+                for r in rows
+                if r["kind"] != "poll"
+            ],
+        }
+
+    @app.get("/api/sessions/{session_id}/export")
+    def export(
+        session_id: int,
+        format: str = Query("geojson", pattern="^(geojson|json)$"),
+        geometry: str = Query("tracks", pattern="^(tracks|points)$"),
+        start: str | None = None,
+        end: str | None = None,
+        aircraft: str | None = Query(None, description="Comma-separated aircraft IDs"),
+    ) -> JSONResponse:
+        store = session_store(session_id)
+        ids = [a.strip().lower() for a in aircraft.split(",") if a.strip()] if aircraft else None
+        window = {
+            "start": _parse_at(start) if start else None,
+            "end": _parse_at(end) if end else None,
+            "aircraft": ids,
+        }
+        shared = app.state.replay_registry
+        try:
+            with shared.lock:
+                if format == "json":
+                    body = export_mod.to_json(store, session_id, config, shared.cache, **window)
+                else:
+                    body = export_mod.to_geojson(store, session_id, config, shared.cache, geometry=geometry, **window)
+        finally:
+            store.close()
+        suffix = "json" if format == "json" else f"{geometry}.geojson"
+        scope = f"-{ids[0]}" if ids and len(ids) == 1 else ""
+        filename = f"airspace-session-{session_id}{scope}-{suffix}"
+        media = "application/geo+json" if format == "geojson" else "application/json"
+        return JSONResponse(body, media_type=media, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
     if WEB_DIST.is_dir():
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")

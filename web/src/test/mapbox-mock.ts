@@ -42,9 +42,14 @@ export class FakeMap {
   getSource(id: string) {
     return this.sources.get(id);
   }
-  addLayer(layer: { id: string }) {
+  addLayer(layer: { id: string; layout?: Record<string, unknown> }) {
     this.addLayerCalls++;
     this.layers.push(layer.id);
+    this.layerSpecs.push(layer);
+  }
+  layerSpecs: { id: string; layout?: Record<string, unknown> }[] = [];
+  getStyle() {
+    return { layers: [{ id: 'place-label', type: 'symbol', layout: { 'text-font': ['Inter Medium', 'Arial Unicode MS Regular'] } }] };
   }
   getCanvas() {
     return this.canvas;

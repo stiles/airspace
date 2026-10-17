@@ -170,7 +170,7 @@ Proposed endpoints:
 
 Start with browser polling every two seconds against the cached local state; it must not trigger provider requests. Consider server-sent events only if useful later. Replay must use only records received by the selected replay time and must never alter live collection state. Reuse the same normalization and state-building functions for live and replay paths.
 
-Build a north-up Mapbox display with a dark basemap, distance rings, visible area boundary, aircraft symbols rotated by ground track and short trails. Aircraft without a track get an unrotated symbol rather than falling back to heading. Owner/operator (`ownOp`) is stored but left out of the default detail panel; it can name private individuals. Use distinct helicopter symbols only when classification is supported. Provide an aircraft list sorted by distance, a selected-aircraft detail panel, altitude controls and a prominent last-update/feed-status indicator. Use Roboto with a system-font fallback and sentence case labels.
+Build a north-up Mapbox display with a dark basemap, distance rings, visible area boundary, aircraft symbols rotated by ground track and short trails. Aircraft without a track get an unrotated symbol rather than falling back to heading. Owner/operator (`ownOp`) is stored but left out of the default detail panel; it can name private individuals. Use distinct helicopter symbols only when classification is supported. Provide an aircraft list sorted by distance, a selected-aircraft detail panel, altitude controls and a prominent last-update/feed-status indicator. Use Inter (matching the Mapbox style) with a system-font fallback and sentence case labels.
 
 Use GeoJSON symbol and line layers rather than one DOM marker per aircraft. Coordinates are always `[longitude, latitude]`. Update existing sources without rebuilding the map. Keep observed markers authoritative; optional animation should interpolate buffered observations, stop on stale data and never create stored positions.
 
@@ -241,6 +241,14 @@ Built October 17, 2026. Decisions made during implementation:
 ### 4. Add replay and exports
 
 Provide session selection, a timeline and pause/speed controls. Export documented JSON/GeoJSON with source and timestamp provenance. Add optional FlightTracer compatibility after inspecting its current interfaces.
+
+Built October 17, 2026. Decisions made during implementation:
+
+- The timeline endpoint (`/api/sessions/{id}/timeline`) returns per-poll outcomes as epoch-millisecond arrays, plus sleep gaps. Its helicopter strip counts ADS-B category A7 only.
+- Playback advances a client playhead and keeps at most one `/api/replay` request in flight, always for the latest playhead. Pausing or seeking writes `?session=&at=` to the URL.
+- Exports (JSON, GeoJSON tracks, GeoJSON points) carry a provenance `metadata` block with source terms, session, range, timestamp definitions and coverage gaps. They omit the home point and distances from home. Track segments use the same break rule as map trails, through a shared function.
+- FlightTracer compatibility is a run folder (`trace.csv` plus `airspace.json`) for one aircraft. It was checked against FlightTracer v0.4.2 by rendering N224LA from the first trial with `flight-tracer render`. FlightTracer hardcodes an ADS-B Exchange source credit on its images, so the fix belongs in FlightTracer (read a source from the run folder).
+- The map uses the stiles Mapbox Standard dark style, overridable with `VITE_MAPBOX_STYLE`. Overlay layers set emissive strength 1 so Standard's night lighting doesn't darken them. Map labels borrow the style's own font stack, and the interface uses Inter, replacing Roboto.
 
 ### 5. Decide on continuous operation
 
