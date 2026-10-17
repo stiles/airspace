@@ -18,15 +18,14 @@ from airspace import report as report_mod
 from airspace.collector import Collector
 from airspace.enrich import HangarbayRegistry
 from airspace.lock import CollectorLock, CollectorLocked
-from airspace.models import PollResult
+from airspace.models import PollResult, to_iso
 from airspace.providers import get_provider
+from airspace.providers.base import USER_AGENT
 from airspace.storage import Store
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="What is flying near home right now.")
 
 ConfigOption = Annotated[Path | None, typer.Option("--config", "-c", help="Config file (default airspace.toml)")]
-
-USER_AGENT = "airspace/0.1 (personal local tracker)"
 
 
 def parse_duration(text: str) -> float:
@@ -179,3 +178,57 @@ def sessions(config_file: ConfigOption = None) -> None:
             f"{r['id']:>4}  {r['started_at']}  {r['provider']:<8} {r['mode']:<8} {r['polls']:>6} polls  "
             f"{r['end_reason'] or 'open'}"
         )
+
+
+def _url_time(value) -> str:
+    return to_iso(value).replace("+00:00", "Z") if value else ""
+
+
+PortOption = Annotated[int, typer.Option(help="Port on 127.0.0.1")]
+
+
+def _serve(config: cfg.Config, mode: str, port: int) -> None:
+    import uvicorn
+
+    from airspace.api import create_app
+
+    # One worker and no auto-reload, so a second collector can never start
+    uvicorn.run(create_app(config, mode=mode), host="127.0.0.1", port=port, workers=1, reload=False)
+
+
+@app.command()
+def serve(config_file: ConfigOption = None, port: PortOption = 8000) -> None:
+    """Run the collector and local API/dashboard together."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    config = _load(config_file)
+    typer.echo(f"Serving http://127.0.0.1:{port} (API docs at /api/docs). Data: adsb.fi (https://adsb.fi).")
+    try:
+        with CollectorLock(config.storage.data_dir):
+            _serve(config, "live", port)
+    except CollectorLocked as exc:
+        typer.echo(f"{exc}. Stop it first, or use `airspace replay` to browse recordings.", err=True)
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def replay(
+    config_file: ConfigOption = None,
+    port: PortOption = 8000,
+    session: Annotated[str, typer.Option(help="Session ID or 'latest' (shown at startup)")] = "latest",
+) -> None:
+    """Serve recorded sessions with live acquisition disabled."""
+    config = _load(config_file)
+    try:
+        store = Store(config.storage.data_dir, read_only=True)
+        session_id = store.resolve_session(session)
+        start, end = store.session_bounds(session_id)
+        store.close()
+    except (FileNotFoundError, LookupError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from None
+    typer.echo(
+        f"Replay mode, no provider requests. Session {session_id} spans {start} to {end}.\n"
+        f"Try http://127.0.0.1:{port}/api/replay?session_id={session_id}&at={_url_time(end)}"
+    )
+    _serve(config, "replay", port)

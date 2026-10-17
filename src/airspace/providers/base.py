@@ -11,6 +11,8 @@ import httpx
 
 from airspace.models import ErrorKind, ParsedResponse, PollResult, SchemaError, utcnow
 
+USER_AGENT = "airspace/0.1 (personal local tracker)"
+
 
 class Provider(Protocol):
     name: str

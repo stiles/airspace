@@ -76,7 +76,7 @@ flowchart TD
 
 The provider adapter returns normalized observations and poll metadata. Collection, persistence, geographic filtering and rendering do not depend on the provider's native response shape.
 
-Proposed stack: Python 3.12+, uv, HTTPX, Pydantic, FastAPI, SQLite through the standard library, Typer and pytest. Frontend: TypeScript, Vite, Mapbox GL JS and CSS. Use plain TypeScript initially; this amount of UI does not require a component framework. Revisit Svelte 5 before milestone 3 if team maintenance alongside the dailygraphics rig matters more than a minimal stack. Resolve supported dependency versions during implementation and commit lockfiles. Use PyProj for geodesic calculations and Shapely when polygon support is added; pandas and GeoPandas can remain optional analysis tools.
+Proposed stack: Python 3.12+, uv, HTTPX, Pydantic, FastAPI, SQLite through the standard library, Typer and pytest. Frontend: Svelte 5 with TypeScript, Vite, Mapbox GL JS and CSS. Decided October 17, 2026, over plain TypeScript: the aircraft list, detail panel, filters and replay timeline carry enough shared UI state to justify a framework, and Svelte matches the team's dailygraphics rig. Resolve supported dependency versions during implementation and commit lockfiles. Use PyProj for geodesic calculations and Shapely when polygon support is added; pandas and GeoPandas can remain optional analysis tools.
 
 ## Collection and normalization
 
@@ -214,6 +214,15 @@ Proposed gate: at least 95% scheduled requests succeed, p95 known position age f
 ### 2. Build the live state service
 
 Implement geographic filtering, trails, freshness, SQLite transactions and API snapshots. Verify single-collector behavior, bounded memory and recovery from request failures and laptop sleep. Replay recorded fixtures through the same state builder.
+
+Built October 17, 2026. Decisions made during implementation:
+
+- Position age at snapshot time is the provider-reported age at the response plus local time since receipt, so the provider's clock is never compared with the local one.
+- Trails split when consecutive positions are more than the trail gap threshold apart or imply a speed above 800 knots.
+- Entry and exit events need two consecutive fresh positions (each within the fade threshold at receipt) on opposite sides of the boundary, with no trail break between them. Everything else is "last seen."
+- Aircraft past the hide threshold move from `aircraft` to `last_seen` in the snapshot. Tracks are dropped from memory once nothing has been received for max(trail duration, hide threshold).
+- Display filters (altitude, surface vehicles) are applied by the client from the full snapshot, so they can never cause provider requests.
+- Replay rebuilds from max(trail duration, hide threshold) plus the trail gap of history before the requested time and takes the true last success from the full poll log. Tests confirm that replay matches the live snapshot (visible aircraft, freshness, ages, trails and feed status) at several moments, including during an outage.
 
 ### 3. Build the Mapbox display
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import statistics
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from airspace import classify as cls
@@ -18,7 +18,8 @@ NULLABLE_FIELDS = [
     "vertical_rate_fpm", "callsign", "registration", "aircraft_type", "category", "position_source",
 ]  # fmt: skip
 
-# Thresholds for flagging a TIS-B track file that may shadow an ADS-B aircraft
+# Thresholds for flagging a non-ICAO TIS-B track file that may shadow an identified aircraft.
+# ICAO-addressed TIS-B targets are excluded: close pairs there were distinct aircraft (e.g. parallel traffic)
 TISB_MAX_DISTANCE_M = 0.5 * METERS_PER_NM
 TISB_MAX_TRACK_DIFF = 5.0
 TISB_MAX_ALT_DIFF_FT = 300
@@ -79,23 +80,39 @@ def build(store: Store, session_id: int, config: Config, registry: cls.Registry 
         r["class"] = classes[r["aircraft_id"]]
 
     airborne_rows = [r for r in rows if r["class"].kind != cls.SURFACE]
+    sleeps = _sleep_windows(polls)
 
     return {
         "session": session,
         "requests": _requests(polls),
         "positions": _positions(airborne_rows, config),
         "aircraft": _aircraft(rows, airborne_rows, classes),
-        "rotorcraft": _rotorcraft(airborne_rows, config),
+        "rotorcraft": _rotorcraft(airborne_rows, config, sleeps),
         "null_rates": {
             f: (sum(r[f] is None for r in airborne_rows) / len(airborne_rows) if airborne_rows else None)
             for f in NULLABLE_FIELDS
         },
         "rejections": {r["reason"]: r["n"] for r in rejected},
-        "gaps": _gaps(airborne_rows, config),
+        "gaps": _gaps(airborne_rows, config, sleeps),
         "tisb_duplicates": _tisb_duplicates(airborne_rows),
         "storage": _storage(store, session_id, polls, len(rows)),
         "registry": registry is not None,
     }
+
+
+def _sleep_windows(polls: list[dict]) -> list[tuple[datetime, datetime]]:
+    """Host sleep intervals; gap rows are written on wake with the slept duration."""
+    windows = []
+    for p in polls:
+        if p["kind"] == "sleep_gap" and p["gap_s"]:
+            woke = from_iso(p["requested_at"])
+            windows.append((woke - timedelta(seconds=p["gap_s"]), woke))
+    return windows
+
+
+def _spans_sleep(a: datetime, b: datetime, sleeps: list[tuple[datetime, datetime]]) -> bool:
+    # Midpoint test: positions just after waking carry times slightly before the wake mark
+    return any(a < start + (end - start) / 2 < b for start, end in sleeps)
 
 
 def _requests(polls: list[dict]) -> dict:
@@ -119,6 +136,12 @@ def _requests(polls: list[dict]) -> dict:
         "sleep_gaps": len(gaps),
         "sleep_gap_s": sum(p["gap_s"] or 0 for p in gaps),
         "span_s": _seconds(last, first),
+        # Share of the window the collector was awake; success rate alone hides sleep
+        "awake_share": (
+            max(0.0, 1 - sum(p["gap_s"] or 0 for p in gaps) / _seconds(last, first))
+            if first and last and last > first
+            else None
+        ),
     }
 
 
@@ -174,18 +197,25 @@ def _by_aircraft(rows: list[dict]) -> dict[str, list[dict]]:
     return grouped
 
 
-def _new_position_intervals(obs: list[dict]) -> list[float]:
+def _new_position_intervals(obs: list[dict], sleeps=()) -> tuple[list[float], int]:
+    """Intervals between new positions, excluding any that span host sleep, and the count excluded."""
     times = sorted(r["position_at"] for r in obs if r["new_position"] and r["position_at"] is not None)
-    return [(b - a).total_seconds() for a, b in zip(times, times[1:])]
+    intervals, spanning = [], 0
+    for a, b in zip(times, times[1:]):
+        if _spans_sleep(a, b, sleeps):
+            spanning += 1
+        else:
+            intervals.append((b - a).total_seconds())
+    return intervals, spanning
 
 
-def _rotorcraft(rows: list[dict], config: Config) -> list[dict]:
+def _rotorcraft(rows: list[dict], config: Config, sleeps) -> list[dict]:
     result = []
     for aid, obs in _by_aircraft(rows).items():
         c = obs[0]["class"]
         if c.kind not in (cls.ROTORCRAFT, cls.GYROPLANE):
             continue
-        intervals = _new_position_intervals(obs)
+        intervals, spanning = _new_position_intervals(obs, sleeps)
         last = obs[-1]
         result.append(
             {
@@ -200,6 +230,7 @@ def _rotorcraft(rows: list[dict], config: Config) -> list[dict]:
                 "first_seen": min(r["received_at"] for r in obs),
                 "last_seen": max(r["received_at"] for r in obs),
                 "max_interval_s": max(intervals) if intervals else None,
+                "sleep_spanning": spanning,
                 "continuity": (
                     sum(i <= config.freshness.trail_gap_s for i in intervals) / len(intervals) if intervals else None
                 ),
@@ -210,12 +241,15 @@ def _rotorcraft(rows: list[dict], config: Config) -> list[dict]:
     return sorted(result, key=lambda r: -r["observations"])
 
 
-def _gaps(rows: list[dict], config: Config) -> dict:
+def _gaps(rows: list[dict], config: Config, sleeps) -> dict:
     threshold = config.freshness.trail_gap_s
     gap_lengths = []
     aircraft_with_gaps = 0
+    sleep_spanning = 0
     for obs in _by_aircraft(rows).values():
-        gaps = [i for i in _new_position_intervals(obs) if i > threshold]
+        intervals, spanning = _new_position_intervals(obs, sleeps)
+        sleep_spanning += spanning
+        gaps = [i for i in intervals if i > threshold]
         gap_lengths.extend(gaps)
         aircraft_with_gaps += bool(gaps)
     return {
@@ -224,6 +258,7 @@ def _gaps(rows: list[dict], config: Config) -> dict:
         "aircraft_with_gaps": aircraft_with_gaps,
         "median_s": _quantile(gap_lengths, 0.5),
         "max_s": max(gap_lengths) if gap_lengths else None,
+        "sleep_spanning": sleep_spanning,
     }
 
 
@@ -233,8 +268,8 @@ def _tisb_duplicates(rows: list[dict]) -> list[dict]:
         by_poll[r["poll_id"]].append(r)
     pairs: Counter = Counter()
     for obs in by_poll.values():
-        tisb = [r for r in obs if (r["position_source"] or "").startswith("tisb")]
-        others = [r for r in obs if not (r["position_source"] or "").startswith("tisb")]
+        tisb = [r for r in obs if r["aircraft_id"].startswith("~")]
+        others = [r for r in obs if not r["aircraft_id"].startswith("~")]
         for t in tisb:
             for o in others:
                 if t["track_deg"] is None or o["track_deg"] is None:
@@ -332,7 +367,8 @@ def render(report: dict, config: Config) -> str:
         f"- Latency median {_fmt(req['latency_ms_median'], '.0f', ' ms')}, p95 {_fmt(req['latency_ms_p95'], '.0f', ' ms')}",
         f"- Responses repeating the previous provider time (possible cache): {req['repeated_provider_time']}",
         f"- Successful responses with no aircraft: {req['empty_responses']}",
-        f"- Host sleep gaps: {req['sleep_gaps']} ({req['sleep_gap_s']:.0f}s total)",
+        f"- Host sleep gaps: {req['sleep_gaps']} ({req['sleep_gap_s'] / 60:.1f} min total); "
+        f"collector awake for {_fmt(req['awake_share'], '.0%')} of the window",
     ]
     for error, n in req["errors"].items():
         lines.append(f"- Error `{error}`: {n}")
@@ -371,16 +407,17 @@ def render(report: dict, config: Config) -> str:
     lines += ["", "## Rotorcraft", ""]
     if report["rotorcraft"]:
         lines += [
-            f"Continuity is the {CONTINUITY_NOTE} ({config.freshness.trail_gap_s:g}s).",
+            f"Continuity is the {CONTINUITY_NOTE} ({config.freshness.trail_gap_s:g}s). "
+            "Intervals spanning host sleep are excluded and counted under Sleep.",
             "",
-            "| ID | Registration | Callsign | Type | Rule | Positions | Seen (UTC) | Max interval | Continuity | Closest | Visible |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| ID | Registration | Callsign | Type | Rule | Positions | Seen (UTC) | Max interval | Continuity | Sleep | Closest | Visible |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for r in report["rotorcraft"]:
             lines.append(
                 f"| {r['aircraft_id']} | {r['registration'] or ''} | {r['callsign'] or ''} | {r['type'] or ''} "
                 f"| {r['rule']} | {r['new_positions']} | {_fmt_time(r['first_seen'])}–{_fmt_time(r['last_seen'])} "
-                f"| {_fmt(r['max_interval_s'], '.0f', 's')} | {_fmt(r['continuity'], '.0%')} "
+                f"| {_fmt(r['max_interval_s'], '.0f', 's')} | {_fmt(r['continuity'], '.0%')} | {r['sleep_spanning']} "
                 f"| {r['min_distance_mi']:.1f} mi | {'yes' if r['visible'] else 'no'} |"
             )
     else:
@@ -393,7 +430,8 @@ def render(report: dict, config: Config) -> str:
         "",
         f"Intervals between new positions longer than {gaps['threshold_s']:g}s, including exits and re-entries: "
         f"{gaps['count']} across {gaps['aircraft_with_gaps']} aircraft "
-        f"(median {_fmt(gaps['median_s'], '.0f', 's')}, max {_fmt(gaps['max_s'], '.0f', 's')}).",
+        f"(median {_fmt(gaps['median_s'], '.0f', 's')}, max {_fmt(gaps['max_s'], '.0f', 's')}). "
+        f"Another {gaps['sleep_spanning']} intervals spanned host sleep and are excluded.",
         "",
         "## Possible TIS-B duplicates",
         "",

@@ -103,3 +103,35 @@ def test_parked_aircraft_do_not_fail_age_gate(config, store):
     data = report.build(store, sid, config)
     assert data["positions"]["age_s_p95"] == 45
     assert report.gate(data, config)["position_age"].startswith("PASS")
+
+
+def test_sleep_spanning_intervals_excluded(config, store):
+    sid = store.start_session("adsbfi", "collect", {})
+    for i in range(10):
+        t = T0 + timedelta(seconds=10 * i)
+        record(store, sid, t, [obs(t, "heli", category="A7")])
+    # Host slept for 10 minutes, then the helicopter is seen again
+    wake = T0 + timedelta(seconds=90 + 600)
+    store.conn.execute(
+        "INSERT INTO polls (session_id, kind, requested_at, gap_s) VALUES (?, 'sleep_gap', ?, 600)",
+        (sid, wake.isoformat(timespec="milliseconds")),
+    )
+    store.conn.commit()
+    for i in range(5):
+        t = wake + timedelta(seconds=10 * i)
+        record(store, sid, t, [obs(t, "heli", category="A7")])
+    data = report.build(store, sid, config)
+    (heli,) = data["rotorcraft"]
+    assert heli["sleep_spanning"] == 1
+    assert heli["max_interval_s"] == 10 and heli["continuity"] == 1
+    assert data["requests"]["awake_share"] < 0.5
+
+
+def test_tisb_duplicates_only_for_track_files(config, store):
+    sid = store.start_session("adsbfi", "collect", {})
+    t = T0
+    record(store, sid, t, [
+        obs(t, "a00001", category="A1", track_deg=220.0, altitude_baro_ft=400),
+        obs(t, "a00002", category="A1", track_deg=222.0, altitude_baro_ft=300, position_source="tisb_icao"),
+    ])
+    assert report.build(store, sid, config)["tisb_duplicates"] == []

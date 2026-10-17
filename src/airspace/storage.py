@@ -8,7 +8,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from airspace.models import Observation, PollResult, to_iso, utcnow
+from airspace.models import ErrorKind, Observation, PollResult, from_iso, to_iso, utcnow
 
 SCHEMA_VERSION = 1
 
@@ -95,7 +95,14 @@ OBSERVATION_COLUMNS = [
 ]  # fmt: skip
 
 
-def connect(path: Path) -> sqlite3.Connection:
+def connect(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
+    if read_only:
+        # Replay readers must never write. mode=ro can't open a WAL database after the
+        # writer has exited (SQLite needs to recreate the -shm file), so use query_only instead
+        conn = sqlite3.connect(path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only=ON")
+        return conn
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
@@ -103,6 +110,15 @@ def connect(path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
     return conn
+
+
+def observation_from_row(row: sqlite3.Row) -> Observation:
+    values = {column: row[column] for column in OBSERVATION_COLUMNS}
+    for column in ("received_at", "provider_at", "position_at"):
+        values[column] = from_iso(values[column])
+    if values["on_ground"] is not None:
+        values["on_ground"] = bool(values["on_ground"])
+    return Observation.model_validate(values)
 
 
 def _observation_values(obs: Observation) -> list:
@@ -118,12 +134,14 @@ def _observation_values(obs: Observation) -> list:
 
 
 class Store:
-    def __init__(self, data_dir: Path, *, store_raw: bool = False):
+    def __init__(self, data_dir: Path, *, store_raw: bool = False, read_only: bool = False):
         self.data_dir = data_dir
         self.db_path = data_dir / "airspace.sqlite"
         self.raw_dir = data_dir / "raw"
-        self.store_raw = store_raw
-        self.conn = connect(self.db_path)
+        self.store_raw = store_raw and not read_only
+        if read_only and not self.db_path.exists():
+            raise FileNotFoundError(f"{self.db_path} not found; nothing recorded yet")
+        self.conn = connect(self.db_path, read_only=read_only)
         # Latest position time per aircraft in the active session, for the new_position flag
         self._last_position: dict[str, str] = {}
 
@@ -237,3 +255,53 @@ class Store:
                FROM sessions s LEFT JOIN polls p ON p.session_id = s.id
                GROUP BY s.id ORDER BY s.id"""
         ).fetchall()
+
+    def polls_between(self, session_id: int, start: datetime | None, end: datetime) -> list[PollResult]:
+        """Polls (with observations) whose receipt time, or request time if never received, is in [start, end]."""
+        effective = "COALESCE(received_at, requested_at)"
+        params: list = [session_id, to_iso(end)]
+        where = f"session_id = ? AND kind = 'poll' AND {effective} <= ?"
+        if start is not None:
+            where += f" AND {effective} >= ?"
+            params.append(to_iso(start))
+        polls = self.conn.execute(f"SELECT * FROM polls WHERE {where} ORDER BY id", params).fetchall()
+        if not polls:
+            return []
+        by_poll: dict[int, list[Observation]] = {p["id"]: [] for p in polls}
+        rows = self.conn.execute(
+            f"SELECT * FROM observations WHERE poll_id IN (SELECT id FROM polls WHERE {where}) ORDER BY id", params
+        )
+        for row in rows:
+            by_poll[row["poll_id"]].append(observation_from_row(row))
+        provider = self.conn.execute("SELECT provider FROM sessions WHERE id = ?", (session_id,)).fetchone()[0]
+        return [
+            PollResult(
+                provider=provider,
+                requested_at=from_iso(p["requested_at"]),
+                received_at=from_iso(p["received_at"]),
+                latency_ms=p["latency_ms"],
+                status_code=p["status_code"],
+                provider_at=from_iso(p["provider_at"]),
+                observations=by_poll[p["id"]],
+                error_kind=ErrorKind(p["error_kind"]) if p["error_kind"] else None,
+                error=p["error"],
+                retry_after_s=p["retry_after_s"],
+            )
+            for p in polls
+        ]
+
+    def last_success_before(self, session_id: int, at: datetime) -> datetime | None:
+        row = self.conn.execute(
+            "SELECT MAX(received_at) FROM polls WHERE session_id = ? AND kind = 'poll' "
+            "AND error_kind IS NULL AND received_at <= ?",
+            (session_id, to_iso(at)),
+        ).fetchone()
+        return from_iso(row[0])
+
+    def session_bounds(self, session_id: int) -> tuple[datetime | None, datetime | None]:
+        row = self.conn.execute(
+            "SELECT MIN(COALESCE(received_at, requested_at)), MAX(COALESCE(received_at, requested_at)) "
+            "FROM polls WHERE session_id = ? AND kind = 'poll'",
+            (session_id,),
+        ).fetchone()
+        return from_iso(row[0]), from_iso(row[1])
