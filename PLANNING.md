@@ -2,7 +2,7 @@
 
 The original technical plan (prepared October 17, 2026, as SPEC.md), with the decisions made while building each milestone and notes on how the pieces work. The [README](README.md) covers installing and using the tool.
 
-**Status:** milestones 1–4 are built. Milestone 5's soak test passed, and retention, memory tracking and a bounded registry cache were added for continuous operation (see [5. Decide on continuous operation](#5-decide-on-continuous-operation)).
+**Status:** milestones 1–4 are built. Milestone 5's soak test passed, and retention, memory tracking and a bounded registry cache were added for continuous operation (see [5. Decide on continuous operation](#5-decide-on-continuous-operation)). Next: the [roadmap](#roadmap), starting with an operator and role catalog for helicopters.
 
 ## Objective
 
@@ -275,6 +275,54 @@ Decision: the adsb.fi API is sufficient for continuous personal use. Freshness d
 - The collector records its memory footprint hourly (`process_stats` table), the report shows first, last, peak and growth per hour, and `/api/health` includes current memory.
 
 Open: where it runs. A laptop under `caffeinate` works for sessions; continuous operation wants an always-on machine (a Mac mini or Raspberry Pi) under `launchd` or `systemd`. The next long run should check the hourly memory trend.
+
+## Roadmap
+
+Planned October 18, 2026, after milestone 5. Commercial traffic is well served elsewhere (Flightradar24, which Matt has through a Gold account and story API credits), so Airspace goes where those don't: helicopters and other low-altitude aircraft, who operates them and what they're doing. Three uses share one core: a neighborhood chopper tracker, story coverage of an event such as a wildfire, and a package other people can point at their own cities. Each phase below is useful by itself, and each one builds on the previous phase.
+
+### Phase A: who's flying and what they're doing
+
+**Milestone 6: operator and role catalog.** A data file maps aircraft to operators and roles, layered on the FAA registry (hangarbay) and the ADS-B category.
+
+- Roles: `police`, `fire`, `medical`, `news`, `military`, `tour`, `utility`, `training`, `private`, `unknown`. Fire covers helicopters and fixed-wing (air tankers, air attack, scoopers).
+- One file per region (`catalogs/los-angeles.csv`, later others), so contributors can add a city without touching code.
+- Columns: `registration`, `icao_hex` (optional; filled from hangarbay when missing), `operator` (e.g. "LAPD Air Support Division"), `role`, `callsign_prefix` (optional, e.g. a police callsign pattern), `type_note`, `source` (where the identification came from) and `checked` (date).
+- Matching order: ICAO hex, then registration, then callsign prefix, then the registered owner name against operator patterns (e.g. "CITY OF LOS ANGELES"). Every match records its rule, like the helicopter classifier does now. An aircraft with no match stays `unknown`; nothing is guessed from type alone.
+- Only organizations go in the catalog. Privately owned aircraft registered to individuals stay "private," with no owner name on the map or in exports.
+- Seed it for LA: LAPD, LASD, LAFD, LA County Fire, CHP, Cal Fire, the news helicopters, medevac operators, and the CL-415 Super Scoopers leased each fire season. Use the recordings from sessions 1–4 to find who actually flies over the area.
+- Shown in the list, the detail panel, hover cards and the map. Role colors stay within the radar palette, with amber kept for helicopters.
+
+**Milestone 7: behavior detection.** Computed from recorded positions by a function shared by live state, replay and exports, like the trail-break rule.
+
+- **Circling:** cumulative turn of at least 360° within a few minutes while staying within a bounded radius of the track's centroid. At 10-second polls, an orbit at 60–80 kt yields 6–12 positions, which is enough. Report the center, radius, duration and number of orbits.
+- **Hovering:** airborne, ground speed under about 15 kt for at least a minute. Track direction is unreliable near zero speed, so this rule uses speed and position only.
+- **Low pass:** below a height threshold over the area. Barometric altitude is above sea level and LA terrain runs from the beach to the hills, so a height above ground needs a terrain model (Mapbox Terrain-RGB tiles or USGS 3DEP). Start with altitude thresholds for the basin and add terrain later.
+- **Repeated passes:** the same aircraft crossing one spot several times, which is useful for fire coverage.
+- Thresholds go in config with defaults tuned on the existing recordings, which include LAPD, LAFD and news helicopters. Tests use recorded tracks plus synthetic orbits, and check the false positives produced by wind-corrected straight lines and by approach patterns.
+- All of these are inferred behaviors and must be labeled that way. "Circling" describes the track; it is not a claim about why the aircraft was there.
+
+**Milestone 8: event log and alerts.** Behaviors become events: "LAPD Air Support, circling 0.8 mi NE, 6 min, 600 ft." Events show in a dashboard feed and on the replay timeline, are stored with their sessions and can trigger optional notifications (macOS notifications first; a webhook such as ntfy later). Add per-role and per-distance alert rules and a quiet period, so one long orbit produces one alert.
+
+### Phase B: event mode for stories
+
+**Milestone 9: event recordings.** `airspace event --name "..." --center LAT,LON --radius 15mi` starts a separate recording with its own data directory, metadata (name, area, start time, notes) and role filters. A fire uses `fire`, plus `police` and `news` if wanted. The area can be a circle or a polygon (a fire perimeter from Cal Fire or NIFC). Recording is independent of the home configuration, so the neighborhood tracker keeps running.
+
+**Milestone 10: licensed provider.** Story use needs a provider whose terms allow it; adsb.fi's are personal and noncommercial. Add a Flightradar24 API adapter behind the existing provider interface. Before building, check FR24's API terms for storing data, publishing derived graphics and attribution, and check how many credits a 10-second polling loop uses. FR24's historical tracks would let an event recording backfill flights from before it started (a fire that broke out overnight). Keep each recording's provider in its provenance, so data under different terms never mixes silently.
+
+**Milestone 11: story exports.** Per-aircraft tracks, events (circling, low passes, repeated passes), and trips between the fire area and water or retardant sources (reservoirs, the ocean for scoopers, helibases and tanker bases from a configurable list). GeoJSON and CSV for graphics, plus a summary table (aircraft by role, sorties, time over the area). Water and retardant drops can't be seen in ADS-B data. Exports describe what the tracks show ("low passes over the fire area," "round trips to Castaic Lake"). Drop counts need a primary source, such as Cal Fire, the agency or the Forest Service. Under WBD policy, anything published needs Technology Intake review.
+
+### Phase C: a package for other cities
+
+**Milestone 12: packaging.** `uv tool install`, a guided `init` (find a home point, choose radii, pick a regional catalog), built dashboard assets shipped in the package so no Node toolchain is needed, and a provider setting: adsb.fi, adsb.lol (recheck its terms and status), FR24, or the user's own receiver.
+
+**Milestone 13: community catalogs.** Contribution guidelines for regional catalogs (sources required, organizations only), validation in CI, and documentation for running the tool continuously under `launchd` or `systemd`.
+
+### Open questions
+
+- Terrain model for height above ground: Mapbox Terrain-RGB (already have a token) or USGS 3DEP (public domain, a download).
+- Whether events need an hourly or daily digest ("LAPD circled the neighborhood four times this week") on top of live alerts.
+- How much catalog data hangarbay could hold instead, so other projects benefit.
+- A local receiver (RTL-SDR plus readsb) stays optional. It would improve low-altitude coverage near home and give data with no third-party terms, which matters if neighborhood data ever feeds a story.
 
 ## Implementation notes
 
