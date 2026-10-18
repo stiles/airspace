@@ -6,6 +6,7 @@ import { altitude, cardinal, degrees, feet, knots, seconds, verticalRate } from 
 import { ageAircraft } from './freshness';
 import { aircraftCollection, circle, destination, iconFor, rings, trailCollection } from './geo';
 import { statusView } from './status';
+import { tooltipFor } from './tooltip';
 
 describe('format', () => {
   it('keeps zero distinct from unknown', () => {
@@ -171,5 +172,26 @@ describe('api', () => {
     expect(maxInFlight).toBe(1);
     expect(calls).toBe(3); // 0-3s, 5-8s, 10s-
     expect(fetchFn.mock.calls.length).toBe(calls);
+  });
+});
+
+describe('tooltip', () => {
+  it('summarizes identity, altitude trend, speed and distance', () => {
+    const t = tooltipFor(aircraft({ vertical_rate_fpm: -900 }));
+    expect(t.title).toBe('N225LA');
+    expect(t.subtitle).toBe('AEROSPATIALE AS-350 Ecureuil');
+    expect(t.lines).toEqual(['1,500 ft ↓ · 80 kt', '0.9 mi NE of home']);
+    expect(t.note).toBeNull();
+  });
+  it('calls small rates level and leaves unknowns out', () => {
+    const t = tooltipFor(
+      aircraft({ vertical_rate_fpm: 200, ground_speed_kt: null, description: null, aircraft_type: null, class: 'unknown' }),
+    );
+    expect(t.lines[0]).toBe('1,500 ft');
+    expect(t.subtitle).toBe('Unknown type');
+  });
+  it('flags aging and untimed positions', () => {
+    expect(tooltipFor(aircraft({ freshness: 'fading', position_age_s: 42 })).note).toBe('Position 42s old');
+    expect(tooltipFor(aircraft({ freshness: 'unknown' })).note).toBe('Position time unknown');
   });
 });

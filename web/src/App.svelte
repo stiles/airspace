@@ -9,6 +9,7 @@
   import { ApiError, exportUrl, replayTarget, startPolling } from './lib/api';
   import { applyFilters, defaultFilters, passes, type Filters } from './lib/filters';
   import { miles } from './lib/format';
+  import { loadPref, savePref } from './lib/prefs';
   import { ageAircraft } from './lib/freshness';
   import { ReplayController } from './lib/replay.svelte';
   import { emptyListMessage, statusView } from './lib/status';
@@ -35,6 +36,13 @@
   let selectedId = $state<string | null>(null);
   let filters = $state<Filters>(defaultFilters());
   let filtersInitialized = false;
+  // Map-only layout for a small always-on window; small windows start compact
+  let compact = $state(loadPref('compact', window.innerWidth < 560 || window.innerHeight < 420));
+
+  function toggleCompact() {
+    compact = !compact;
+    savePref('compact', compact);
+  }
 
   const replay = new ReplayController({
     fetchFn: (...args) => fetchFn(...args),
@@ -146,7 +154,17 @@
 
 <svelte:window onkeydown={keydown} />
 
-<div class="app">
+{#snippet credit()}
+  Data:
+  {#if attribution?.url}
+    <a href={attribution.url} target="_blank" rel="noreferrer">{attribution.name ?? attribution.provider}</a>
+  {:else}
+    {attribution?.provider ?? 'unknown source'}
+  {/if}
+  · personal, noncommercial use
+{/snippet}
+
+<div class="app" class:compact>
   <header class="bar">
     <h1>Airspace</h1>
     {#if !replayOnly}
@@ -156,49 +174,55 @@
       </div>
     {/if}
     <FeedStatus {view} />
+    <div class="right">
     {#if snapshot && !view.untrusted}
       <span class="count" data-testid="count">
         {listed.length} aircraft{filters.listVisibleOnly ? ` within ${visibleLabel}` : ''}
       </span>
     {/if}
+    <button
+      type="button"
+      class="layout"
+      aria-pressed={compact}
+      onclick={toggleCompact}
+      title={compact ? 'Show the list and filters' : 'Map only, for a small window'}
+      data-testid="compact-toggle">{compact ? 'Expand' : 'Compact'}</button
+    >
+    </div>
   </header>
 
   <main>
     <div class="map-column">
       <div class="map-pane" class:untrusted={view.untrusted}>
-        <MapView aircraft={onMap} area={snapshot?.area ?? null} {selectedId} onselect={select} />
+        <MapView aircraft={onMap} area={snapshot?.area ?? null} {selectedId} onselect={select} {compact} />
       </div>
       {#if mode === 'replay'}
-        <Timeline {replay} />
+        <Timeline {replay} {compact} />
       {/if}
     </div>
-    <aside>
-      <FiltersPanel bind:filters {visibleLabel} />
-      <DetailPanel
-        aircraft={selected}
-        lastSeen={selectedLastSeen}
-        hiddenByFilters={selected !== null && !passes(selected, filters)}
-        exportHref={sessionId !== null && selectedId ? exportUrl(sessionId, { aircraft: selectedId }) : null}
-        onclose={() => select(null)}
-      />
-      <div class="list-wrap">
-        <AircraftList
-          aircraft={listed}
-          {selectedId}
-          emptyMessage={emptyListMessage(view, aged.length > 0)}
-          onselect={select}
+    {#if compact}
+      <footer class="credit-bar">{@render credit()}</footer>
+    {:else}
+      <aside>
+        <FiltersPanel bind:filters {visibleLabel} />
+        <DetailPanel
+          aircraft={selected}
+          lastSeen={selectedLastSeen}
+          hiddenByFilters={selected !== null && !passes(selected, filters)}
+          exportHref={sessionId !== null && selectedId ? exportUrl(sessionId, { aircraft: selectedId }) : null}
+          onclose={() => select(null)}
         />
-      </div>
-      <footer>
-        Data:
-        {#if attribution?.url}
-          <a href={attribution.url} target="_blank" rel="noreferrer">{attribution.name ?? attribution.provider}</a>
-        {:else}
-          {attribution?.provider ?? 'unknown source'}
-        {/if}
-        · personal, noncommercial use
-      </footer>
-    </aside>
+        <div class="list-wrap">
+          <AircraftList
+            aircraft={listed}
+            {selectedId}
+            emptyMessage={emptyListMessage(view, aged.length > 0)}
+            onselect={select}
+          />
+        </div>
+        <footer>{@render credit()}</footer>
+      </aside>
+    {/if}
   </main>
 </div>
 
@@ -225,6 +249,7 @@
     --amber: #ffb020;
     --unknown: #5c8c72;
     --surface: #3c5a4a;
+    --ring: #1f7a4a;
     --track: #0b1a12;
     --ok: #1d6b42;
     --sleep: #26392f;
@@ -272,10 +297,43 @@
     font-weight: 500;
     letter-spacing: 0.04em;
   }
-  .count {
+  .right {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 12px;
     margin-left: auto;
+  }
+  .count {
     flex: none;
     color: var(--muted-strong);
+    font-size: 13px;
+  }
+  .layout {
+    flex: none;
+    padding: 4px 10px;
+    border: 1px solid var(--control-line);
+    border-radius: 4px;
+    background: var(--control-bg);
+    color: var(--muted-strong);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .layout:hover {
+    border-color: var(--control-line-hover);
+    color: var(--text);
+  }
+  /* Compact: one slim bar over the map, nothing else */
+  .compact .bar {
+    flex-wrap: nowrap;
+    gap: 10px;
+    padding: 5px 10px;
+  }
+  .compact .modes {
+    display: none;
+  }
+  .compact h1 {
     font-size: 13px;
   }
   main {
@@ -338,6 +396,21 @@
   footer a {
     color: var(--muted);
   }
+  .credit-bar {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    padding: 3px 10px;
+    border-top: 0;
+    font-size: 11px;
+  }
+  .compact main {
+    position: relative;
+  }
+  .compact .map-column {
+    padding-bottom: 20px;
+  }
   @media (max-width: 760px) {
     main {
       flex-direction: column;
@@ -354,6 +427,10 @@
     }
     .bar {
       flex-wrap: wrap;
+    }
+    .compact .map-column {
+      flex: 1;
+      height: auto;
     }
   }
 </style>

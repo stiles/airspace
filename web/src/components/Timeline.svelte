@@ -3,7 +3,8 @@
   import { SPEEDS, type ReplayController } from '../lib/replay.svelte';
   import { bins, toTime, toX } from '../lib/timeline';
 
-  let { replay }: { replay: ReplayController } = $props();
+  // Compact drops the session picker, exports and key, leaving transport and scrubber
+  let { replay, compact = false }: { replay: ReplayController; compact?: boolean } = $props();
 
   let width = $state(0);
   let dragging = false;
@@ -48,7 +49,7 @@
   }
 </script>
 
-<div class="timeline" data-testid="timeline">
+<div class="timeline" class:compact data-testid="timeline">
   <div class="controls">
     <button type="button" onclick={() => replay.step(-1)} aria-label="Previous poll" title="Previous poll (←)">⏮</button>
     <button
@@ -70,30 +71,32 @@
     </label>
     <span class="now" data-testid="replay-time">{tl ? `${day(replay.at)}, ${time(replay.at)}` : ''}</span>
 
-    <label class="session">
-      <span class="visually-hidden">Session</span>
-      <select
-        value={replay.sessionId}
-        onchange={(e) => replay.selectSession(Number((e.currentTarget as HTMLSelectElement).value))}
-        data-testid="session"
-      >
-        {#each replay.sessions as s (s.id)}
-          <option value={s.id}>
-            Session {s.id} · {s.first_poll_at ? day(Date.parse(s.first_poll_at)) : ''}
-            {s.first_poll_at ? time(Date.parse(s.first_poll_at)) : ''} · {s.polls} polls
-          </option>
-        {/each}
-      </select>
-    </label>
-    {#if replay.sessionId !== null}
-      <details class="export">
-        <summary>Export</summary>
-        <div class="menu">
-          <a href={exportUrl(replay.sessionId, { geometry: 'tracks' })} download>Tracks (GeoJSON)</a>
-          <a href={exportUrl(replay.sessionId, { geometry: 'points' })} download>Points (GeoJSON)</a>
-          <a href={exportUrl(replay.sessionId, { format: 'json' })} download>Observations (JSON)</a>
-        </div>
-      </details>
+    {#if !compact}
+      <label class="session">
+        <span class="visually-hidden">Session</span>
+        <select
+          value={replay.sessionId}
+          onchange={(e) => replay.selectSession(Number((e.currentTarget as HTMLSelectElement).value))}
+          data-testid="session"
+        >
+          {#each replay.sessions as s (s.id)}
+            <option value={s.id}>
+              Session {s.id} · {s.first_poll_at ? day(Date.parse(s.first_poll_at)) : ''}
+              {s.first_poll_at ? time(Date.parse(s.first_poll_at)) : ''} · {s.polls} polls
+            </option>
+          {/each}
+        </select>
+      </label>
+      {#if replay.sessionId !== null}
+        <details class="export">
+          <summary>Export</summary>
+          <div class="menu">
+            <a href={exportUrl(replay.sessionId, { geometry: 'tracks' })} download>Tracks (GeoJSON)</a>
+            <a href={exportUrl(replay.sessionId, { geometry: 'points' })} download>Points (GeoJSON)</a>
+            <a href={exportUrl(replay.sessionId, { format: 'json' })} download>Observations (JSON)</a>
+          </div>
+        </details>
+      {/if}
     {/if}
   </div>
 
@@ -145,7 +148,7 @@
     </svg>
     <div class="legend">
       <span>{tl ? time(start) : ''}</span>
-      <span class="keys">
+      <span class="keys" class:visually-hidden={compact}>
         <i class="k ok"></i>Polled <i class="k failed"></i>Failed <i class="k sleep"></i>Asleep
         <i class="k heli"></i>Helicopter (ADS-B A7)
       </span>
@@ -160,6 +163,12 @@
     border-top: 1px solid var(--line);
     background: var(--panel);
     font-size: 13px;
+  }
+  .compact {
+    padding: 5px 10px 4px;
+  }
+  .compact .controls {
+    gap: 6px;
   }
   .controls {
     display: flex;

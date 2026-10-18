@@ -24,6 +24,15 @@ uv run airspace sessions
 
 `collect` polls adsb.fi every 10 seconds, one request at a time, and writes to `data/airspace.sqlite`. With `store_raw = true` it also keeps gzipped raw responses in `data/raw/`. A file lock stops a second collector from writing to the same data directory. Ctrl-C ends the session cleanly.
 
+macOS sleeps an idle laptop, and the collector records that as a gap rather than coverage. For long runs, wrap the command in `caffeinate -i`, which blocks idle sleep for as long as the command runs:
+
+```bash
+caffeinate -i uv run airspace collect --duration 8h
+caffeinate -i uv run airspace serve
+```
+
+Closing the lid still sleeps most MacBooks; `caffeinate -s` also blocks system sleep, but only on AC power.
+
 Collection pauses instead of retrying on non-429 client errors, because adsb.fi counts those toward its rate limit, and after three consecutive schema errors. A 429 waits at least as long as `Retry-After`. Other failures back off exponentially with jitter. When the laptop sleeps, the collector records a gap and resumes without making up the missed polls.
 
 `report` prints the milestone 1 gate (request success, p95 position age, helicopter continuity), plus latency, cached and repeated positions, null-field rates, gaps, possible TIS-B duplicates and storage per hour. Surface vehicles (ADS-B categories C1 through C5) are excluded from the metrics.
@@ -76,6 +85,8 @@ For frontend work, run `npm run dev` in `web/` while `airspace serve` is running
 What the dashboard does:
 
 - **Map:** a north-up radar-scope look. `dark-v11` is recolored to dim greens with POI, transit and shield clutter hidden. Aircraft and rings are phosphor green, helicopters amber, and the selection and home point cyan. Trails fade like a phosphor afterglow. The palette lives in `web/src/lib/theme.ts` and as CSS variables in `App.svelte`. Overlays set emissive strength so Mapbox Standard styles' night lighting doesn't dim them. The map has mile rings, the visible boundary and the collection limit. Symbols are rotated by ground track. Helicopters get an amber rotor symbol only when the classifier says rotorcraft, and aircraft without a track get an unrotated symbol. Labels show altitude in hundreds of feet (`015` means 1,500 ft barometric).
+- **Legend and hover cards:** a legend in the lower left explains the symbols, rings and altitude labels; it folds away and remembers that. Hovering an aircraft shows its identity, type, altitude with a climb or descent arrow (300 ft/min or more), speed and distance from home, plus a note when the position is aging.
+- **Compact mode:** the Compact button in the header switches to a map-only layout for a small always-on window. It keeps the feed status, the aircraft count and the data credit, and drops the side panel. With no detail panel, clicking an aircraft pins its hover card. Windows narrower than 560 px or shorter than 420 px start compact, and the choice is remembered in the browser.
 - **Updates:** the browser reads `/api/state` every two seconds. That never triggers provider requests. Map layers are created once; each update only replaces source data.
 - **Filters:** altitude presets, unknown altitude (shown by default), on-ground aircraft and surface vehicles (hidden by default, to keep LAX traffic out of the way), and list-only-within-visible-radius. Filters run in the browser.
 - **Freshness:** positions keep aging on the browser's clock between updates. If the local server stops responding, markers fade and then disappear instead of freezing.

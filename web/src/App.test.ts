@@ -42,6 +42,7 @@ function map() {
 
 beforeEach(() => {
   instances.length = 0;
+  localStorage.clear();
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
   vi.setSystemTime(new Date('2026-10-17T20:00:02Z'));
 });
@@ -307,5 +308,78 @@ describe('Replay mode', () => {
     await fireEvent.click(screen.getByRole('button', { name: /N225LA/ }));
     const link = screen.getByRole('link', { name: /Export this aircraft/ });
     expect(link).toHaveAttribute('href', '/api/sessions/1/export?format=geojson&geometry=tracks&aircraft=a1f48f');
+  });
+});
+
+describe('Map extras', () => {
+  it('shows a hover card that follows its aircraft and clears on leave', async () => {
+    const moved = { ...heli, longitude: -118.4, vertical_rate_fpm: 640 };
+    render(App, { fetchFn: server([snapshot({ aircraft: [heli, jet] }), snapshot({ sequence: 2, aircraft: [moved, jet] })]), pollMs: POLL });
+    await advance(0);
+    expect(screen.queryByTestId('map-tooltip')).toBeNull();
+
+    map().fire('mousemove:aircraft', { features: [{ properties: { id: 'a1f48f' } }] });
+    await tick();
+    const card = screen.getByTestId('map-tooltip');
+    expect(card).toHaveTextContent('N225LA');
+    expect(card).toHaveTextContent('AEROSPATIALE AS-350 Ecureuil');
+    expect(card).toHaveTextContent('1,500 ft · 80 kt');
+    expect(card).toHaveTextContent('0.9 mi NE of home');
+    expect(card.style.left).toBe('90px');
+
+    await advance(POLL);
+    expect(screen.getByTestId('map-tooltip')).toHaveTextContent('1,500 ft ↑ · 80 kt');
+    expect(screen.getByTestId('map-tooltip').style.left).toBe('100px');
+
+    map().fire('mouseleave:aircraft', {});
+    await tick();
+    expect(screen.queryByTestId('map-tooltip')).toBeNull();
+  });
+
+  it('has a legend that names the visible radius and remembers being closed', async () => {
+    render(App, { fetchFn: server([snapshot()]), pollMs: POLL });
+    await advance(0);
+    const legend = screen.getByTestId('legend') as HTMLDetailsElement;
+    expect(legend.open).toBe(true);
+    expect(legend).toHaveTextContent(/Visible area, \d/);
+    expect(legend).toHaveTextContent('Helicopter');
+    legend.open = false;
+    await fireEvent(legend, new Event('toggle'));
+    expect(localStorage.getItem('airspace:legend')).toBe('0');
+  });
+
+  it('compact mode keeps the map and credit, drops the panel and pins the selection card', async () => {
+    const fetchFn = server([snapshot({ aircraft: [heli, jet] })]);
+    render(App, { fetchFn, pollMs: POLL });
+    await advance(0);
+    expect(screen.getByTestId('aircraft-list')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByTestId('compact-toggle'));
+    expect(screen.queryByTestId('aircraft-list')).toBeNull();
+    expect(screen.getByTestId('map')).toBeInTheDocument();
+    expect(screen.getByText(/personal, noncommercial use/)).toBeInTheDocument();
+    expect(screen.getByTestId('feed-status')).toBeInTheDocument();
+    expect(localStorage.getItem('airspace:compact')).toBe('1');
+    // Folded by default in compact
+    expect((screen.getByTestId('legend') as HTMLDetailsElement).open).toBe(false);
+
+    map().rendered = [{ properties: { id: 'a6ed7f' } }];
+    map().fire('click', { point: { x: 1, y: 1 } });
+    await tick();
+    expect(screen.getByTestId('map-tooltip')).toHaveTextContent('UAL2113');
+
+    await fireEvent.click(screen.getByTestId('compact-toggle'));
+    expect(screen.getByTestId('detail')).toHaveTextContent('UAL2113');
+    expect(screen.queryByTestId('map-tooltip')).toBeNull();
+    // Same map instance throughout
+    expect(instances).toHaveLength(1);
+  });
+
+  it('starts compact when the preference says so', async () => {
+    localStorage.setItem('airspace:compact', '1');
+    render(App, { fetchFn: server([snapshot()]), pollMs: POLL });
+    await advance(0);
+    expect(screen.queryByTestId('aircraft-list')).toBeNull();
+    expect(screen.getByTestId('compact-toggle')).toHaveAttribute('aria-pressed', 'true');
   });
 });

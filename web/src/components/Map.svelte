@@ -1,12 +1,15 @@
 <script lang="ts">
   import mapboxgl, { type GeoJSONSource } from 'mapbox-gl';
   import 'mapbox-gl/dist/mapbox-gl.css';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { aircraftCollection, circle, rings, trailCollection } from '../lib/geo';
   import { drawIcon, ICON_NAMES, ICON_PIXEL_RATIO } from '../lib/icons';
   import { radarizeBasemap } from '../lib/basemap';
   import { FALLBACK_FONT, MAPBOX_STYLE, MAPBOX_TOKEN } from '../lib/config';
   import { SCOPE } from '../lib/theme';
+  import { miles } from '../lib/format';
+  import { tooltipFor } from '../lib/tooltip';
+  import Legend from './Legend.svelte';
   import type { Aircraft, LonLat, Snapshot } from '../lib/types';
 
   interface Props {
@@ -14,9 +17,11 @@
     area: Snapshot['area'] | null;
     selectedId: string | null;
     onselect: (id: string | null) => void;
+    /** Compact mode: no detail panel, so the selection keeps its hover card open */
+    compact?: boolean;
   }
 
-  let { aircraft, area, selectedId, onselect }: Props = $props();
+  let { aircraft, area, selectedId, onselect, compact = false }: Props = $props();
 
   const TOKEN = MAPBOX_TOKEN;
 
@@ -37,6 +42,24 @@
   let map: mapboxgl.Map | null = null;
   let ready = $state(false);
   let fittedHome: string | null = null;
+  let hoveredId = $state<string | null>(null);
+  // Bumped on every camera move so the hover card follows its aircraft
+  let view = $state(0);
+  let width = $state(0);
+  let height = $state(0);
+
+  const tipTarget = $derived(hoveredId ?? (compact ? selectedId : null));
+  const tipAircraft = $derived(tipTarget ? (aircraft.find((a) => a.id === tipTarget) ?? null) : null);
+  const tip = $derived(tipAircraft ? tooltipFor(tipAircraft) : null);
+  const tipPoint = $derived.by(() => {
+    void view;
+    if (!ready || !map || !tipAircraft) return null;
+    return map.project([tipAircraft.longitude, tipAircraft.latitude]);
+  });
+  // Keep the card on screen: flip left near the right edge, clamp near top and bottom
+  const tipLeft = $derived(tipPoint !== null && tipPoint.x > width - 230);
+  const tipY = $derived(tipPoint ? Math.min(Math.max(tipPoint.y, 44), Math.max(44, height - 44)) : 0);
+  const visibleLabel = $derived(area ? miles(area.visible_radius_m) : '');
 
   function source(id: string): GeoJSONSource | undefined {
     return map?.getSource(id) as GeoJSONSource | undefined;
@@ -207,8 +230,16 @@
       const hit = m.queryRenderedFeatures(e.point, { layers: ['aircraft'] })[0];
       onselect(hit ? String(hit.properties?.id) : null);
     });
-    m.on('mouseenter', 'aircraft', () => (m.getCanvas().style.cursor = 'pointer'));
-    m.on('mouseleave', 'aircraft', () => (m.getCanvas().style.cursor = ''));
+    m.on('mousemove', 'aircraft', (e) => {
+      const id = e.features?.[0]?.properties?.id;
+      hoveredId = id === undefined ? null : String(id);
+      m.getCanvas().style.cursor = 'pointer';
+    });
+    m.on('mouseleave', 'aircraft', () => {
+      hoveredId = null;
+      m.getCanvas().style.cursor = '';
+    });
+    m.on('move', () => view++);
   }
 
   onMount(() => {
@@ -248,6 +279,24 @@
     }
   });
 
+  // Layout changes (compact mode, the replay bar) resize the container; keep the canvas in step
+  $effect(() => {
+    if (!ready || !width || !height) return;
+    map?.resize();
+  });
+
+  // Switching layouts changes the map size a lot; refit so the visible area stays in view
+  let fittedCompact = untrack(() => compact);
+  $effect(() => {
+    const c = compact;
+    if (!ready || c === fittedCompact) return;
+    fittedCompact = c;
+    requestAnimationFrame(() => {
+      map?.resize();
+      if (map && area) map.fitBounds(visibleBounds(area), { padding: 24, duration: 0 });
+    });
+  });
+
   // Every update: replace source data in place, never rebuild layers
   $effect(() => {
     if (!ready) return;
@@ -256,10 +305,36 @@
   });
 </script>
 
-<div class="map-wrap">
+<div class="map-wrap" bind:clientWidth={width} bind:clientHeight={height}>
   {#if TOKEN}
     <div class="map" bind:this={container} data-testid="map"></div>
     <button class="recenter" type="button" onclick={recenter} aria-label="Recenter on home area">Recenter</button>
+    {#if area}
+      <!-- Remount on layout change so each layout keeps its own open/closed choice -->
+      {#key compact}
+        <Legend {visibleLabel} {compact} />
+      {/key}
+    {/if}
+    {#if tip && tipPoint}
+      <div
+        class="tooltip"
+        class:left={tipLeft}
+        class:heli={tipAircraft?.class === 'rotorcraft' || tipAircraft?.class === 'gyroplane'}
+        style:left="{tipPoint.x}px"
+        style:top="{tipY}px"
+        role="tooltip"
+        data-testid="map-tooltip"
+      >
+        <strong>{tip.title}</strong>
+        <span class="sub">{tip.subtitle}</span>
+        {#each tip.lines as line (line)}
+          <span>{line}</span>
+        {/each}
+        {#if tip.note}
+          <span class="note">{tip.note}</span>
+        {/if}
+      </div>
+    {/if}
   {:else}
     <div class="no-token">
       <p>Map unavailable: set <code>VITE_MAPBOX_TOKEN</code> in <code>web/.env.local</code> and restart.</p>
@@ -293,6 +368,45 @@
   }
   .recenter:hover {
     border-color: var(--control-line-hover);
+  }
+  .tooltip {
+    position: absolute;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-width: 210px;
+    padding: 6px 9px;
+    border: 1px solid var(--control-line);
+    border-left: 2px solid var(--phosphor);
+    border-radius: 3px;
+    background: rgba(5, 12, 8, 0.94);
+    color: var(--text-soft);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    transform: translate(16px, -50%);
+  }
+  .tooltip.left {
+    transform: translate(calc(-100% - 16px), -50%);
+  }
+  .tooltip.heli {
+    border-left-color: var(--amber);
+  }
+  .tooltip strong {
+    color: var(--text);
+    font-family: var(--mono);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .tooltip .sub {
+    overflow: hidden;
+    color: var(--muted-strong);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tooltip .note {
+    color: var(--amber);
   }
   .no-token {
     display: grid;
