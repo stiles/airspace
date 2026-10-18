@@ -157,3 +157,102 @@ def test_stop_event(config, store):
     collector.clock.sleep = sleep_then_stop
     assert asyncio.run(collector.run(stop=stop)) == "stopped"
     assert len(poll_kinds(store)) == 2
+
+
+def _fast_config(config, interval=2.0, hold=30.0):
+    config.collector.fast_interval_s = interval
+    config.collector.fast_hold_s = hold
+    return config
+
+
+def test_fast_polling_while_triggered_then_holds_and_relaxes(config, store):
+    # Triggered on polls 3-5 (by count), then quiet
+    seen = []
+
+    def trigger(result):
+        seen.append(len(seen) + 1)
+        return 3 <= len(seen) <= 5
+
+    collector, fake = make_collector(_fast_config(config), store, responses(httpx.Response(200, content=EMPTY)),
+                                     fast_trigger=trigger)
+    delays = []
+    for _ in range(25):
+        result = asyncio.run(collector.poll_once())
+        delays.append(collector.next_delay(result))
+        fake.mono += delays[-1]
+    assert delays[:2] == [10, 10]
+    assert delays[2:5] == [2, 2, 2]
+    # Holds at 2 s for 30 s after the last trigger (15 polls), then back to 10
+    assert delays[5:19] == [2] * 14 and delays[19:] == [10] * 6
+    fast = [r["fast"] for r in store.conn.execute("SELECT fast FROM polls ORDER BY id")]
+    assert fast[:3] == [0, 0, 0] and fast[3] == 1 and fast[-1] == 0
+
+
+def test_fast_polling_off_by_config_and_on_failure(config, store):
+    collector, _ = make_collector(_fast_config(config, interval=0), store, responses(httpx.Response(200, content=EMPTY)),
+                                  fast_trigger=lambda r: True)
+    assert collector.next_delay(asyncio.run(collector.poll_once())) == 10
+
+    collector, _ = make_collector(_fast_config(config), store,
+                                  responses(httpx.Response(200, content=EMPTY), httpx.Response(503)),
+                                  fast_trigger=lambda r: True)
+    assert collector.next_delay(asyncio.run(collector.poll_once())) == 2
+    # A failure drops fast mode and backs off from the normal interval
+    assert collector.next_delay(asyncio.run(collector.poll_once())) == 20
+    assert collector.fast is False
+
+
+def test_fast_interval_validated(config):
+    from airspace.config import Config
+
+    data = config.model_dump(mode="json")
+    data["collector"]["fast_interval_s"] = 0.5
+    with pytest.raises(ValueError, match="fast_interval_s"):
+        Config.model_validate(data)
+
+
+def test_fast_trigger_rules(config):
+    from helpers import at, obs, poll
+
+    from airspace.catalog import Catalog
+    from airspace.collector import make_fast_trigger
+    from airspace.replay import RegistryCache
+
+    plain = make_fast_trigger(config)
+    t = at(0)
+    assert plain(poll(t, [obs(t, "h1", category="A7", miles=2)]))
+    assert not plain(poll(t, [obs(t, "h1", category="A7", miles=8)]))  # outside the visible area
+    assert not plain(poll(t, [obs(t, "h1", category="A7", miles=2, on_ground=True)]))
+    assert not plain(poll(t, [obs(t, "h1", category="A7", miles=2, age=45)]))  # stale position
+    assert not plain(poll(t, [obs(t, "j1", category="A3", miles=2)]))
+
+    catalog = Catalog()
+    catalog._pattern_row({"pattern": "POLICE", "operator": "", "role": "police", "source": "test"})
+    with_catalog = make_fast_trigger(config, RegistryCache(None, catalog=catalog))
+    # A fixed-wing police aircraft counts once the catalog knows it
+    assert with_catalog(poll(t, [obs(t, "p1", category="A1", miles=2, owner_operator="CITY POLICE DEPT")]))
+    assert not with_catalog(poll(t, [obs(t, "p2", category="A1", miles=2, owner_operator="ACME LLC")]))
+
+
+def test_old_database_gains_fast_column(tmp_path):
+    import sqlite3
+
+    from airspace.storage import Store
+
+    data = tmp_path / "old"
+    data.mkdir()
+    conn = sqlite3.connect(data / "airspace.sqlite")
+    conn.execute("CREATE TABLE polls (id INTEGER PRIMARY KEY, session_id INTEGER, kind TEXT, requested_at TEXT)")
+    conn.commit()
+    conn.close()
+    store = Store(data)
+    assert "fast" in {r["name"] for r in store.conn.execute("PRAGMA table_info(polls)")}
+    store.close()
+
+
+def test_run_polls_fast_on_the_schedule(config, store):
+    collector, _ = make_collector(_fast_config(config), store, responses(httpx.Response(200, content=EMPTY)),
+                                  fast_trigger=lambda r: True)
+    asyncio.run(collector.run(duration_s=60))
+    # First poll at the normal mode, then every 2 s: t = 0, 2, ..., 58
+    assert len(poll_kinds(store)) == 30

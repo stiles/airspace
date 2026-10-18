@@ -143,6 +143,9 @@ def _requests(polls: list[dict]) -> dict:
         "latency_ms_p95": _quantile(latencies, 0.95),
         "repeated_provider_time": repeated,
         "empty_responses": sum(1 for p in ok if p["accepted"] == 0 and p["rejected"] == 0),
+        # Databases from before fast polling have no column; treat those polls as normal
+        "fast_polls": sum(1 for p in scheduled if p.get("fast")),
+        "requests_per_hour": len(scheduled) / (_seconds(last, first) / 3600) if first and last and last > first else None,
         "sleep_gaps": len(gaps),
         "sleep_gap_s": sum(p["gap_s"] or 0 for p in gaps),
         "span_s": _seconds(last, first),
@@ -428,6 +431,8 @@ def render(report: dict, config: Config) -> str:
         f"- Latency median {_fmt(req['latency_ms_median'], '.0f', ' ms')}, p95 {_fmt(req['latency_ms_p95'], '.0f', ' ms')}",
         f"- Responses repeating the previous provider time (possible cache): {req['repeated_provider_time']}",
         f"- Successful responses with no aircraft: {req['empty_responses']}",
+        f"- Fast polling: {req['fast_polls']} polls ({_fmt(req['fast_polls'] / req['scheduled'] if req['scheduled'] else None, '.0%')}); "
+        f"{_fmt(req['requests_per_hour'], '.0f')} requests/hour overall",
         f"- Host sleep gaps: {req['sleep_gaps']} ({req['sleep_gap_s'] / 60:.1f} min total); "
         f"collector awake for {_fmt(req['awake_share'], '.0%')} of the window",
     ]

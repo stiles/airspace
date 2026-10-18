@@ -14,7 +14,8 @@ What's flying near home right now? Airspace is a local aircraft tracker. It poll
 - **Exports:** JSON or GeoJSON (tracks or points) with provenance, and run folders for [FlightTracer](https://github.com/stiles/flight-tracer).
 - **Coverage reports:** request success, position age, helicopter continuity, gaps and storage for any recorded session.
 - **Compact mode:** a map-only layout for a small always-on window.
-- **Local only:** one collector, one request every 10 seconds, an API bound to `127.0.0.1`. The browser never contacts the data provider.
+- **Adaptive polling:** one request every 10 seconds, or every 2 seconds while a helicopter or public-safety aircraft is in the visible area, so orbits read as circles rather than triangles.
+- **Local only:** one collector, one request at a time, an API bound to `127.0.0.1`. The browser never contacts the data provider.
 
 ## Requirements
 
@@ -107,10 +108,12 @@ Exports include source, terms and timestamp provenance and never include the hom
 | --- | --- |
 | `[home]` | `latitude`, `longitude`, `label` |
 | `[area]` | `visible_radius_mi` (5), `collection_radius_nm` (10), `max_altitude_baro_ft` (initial filter preset) |
-| `[collector]` | `poll_interval_s` (10), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (false; keep gzipped raw responses) |
+| `[collector]` | `poll_interval_s` (10), `fast_interval_s` (2; 0 turns it off), `fast_hold_s` (60), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (false; keep gzipped raw responses) |
 | `[freshness]` | `fade_s` (20), `hide_s` (60), `trail_gap_s` (30), `trail_duration_s` (300) |
 | `[storage]` | `data_dir` (`data`), `retention_days` (7; 0 keeps everything) |
 | `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off. `catalogs`: operator catalog files or folders (`catalogs`) |
+
+Fast polling starts when an airborne helicopter, or a cataloged police, fire, medical or news aircraft, is inside the visible area with a position under `fade_s` old, and stays on for `fast_hold_s` after the last one. adsb.fi allows one request per second, so `fast_interval_s` can't go below 1. Failures drop back to the normal interval and its backoff. Each poll records whether it was fast, and `airspace report` shows the share.
 
 The collector prunes recordings older than `retention_days` when it starts and every hour after, removing sessions it empties along with their raw files. SQLite grows about 3–4 MB/hour, so a week takes roughly 600 MB; `store_raw = true` adds about 1 MB/hour. Deleted space is reused rather than returned to the disk; run `sqlite3 data/airspace.sqlite VACUUM` with the collector stopped to shrink the file.
 

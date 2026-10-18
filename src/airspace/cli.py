@@ -17,11 +17,12 @@ import typer
 from airspace import config as cfg
 from airspace import report as report_mod
 from airspace.catalog import Catalog, CatalogError
-from airspace.collector import Collector
+from airspace.collector import Collector, make_fast_trigger
 from airspace.enrich import HangarbayRegistry
 from airspace.lock import CollectorLock, CollectorLocked
 from airspace.models import PollResult, to_iso
 from airspace.providers import get_provider
+from airspace.replay import RegistryCache
 from airspace.providers.base import USER_AGENT
 from airspace.storage import Store
 
@@ -85,11 +86,11 @@ def init(
     typer.echo(f"Wrote {path}")
 
 
-def _status_line(result: PollResult) -> str:
+def _status_line(result: PollResult, fast: bool = False) -> str:
     stamp = result.requested_at.strftime("%H:%M:%S")
     if result.ok:
         rejected = f", {len(result.rejections)} rejected" if result.rejections else ""
-        return f"{stamp}  {len(result.observations):3d} aircraft{rejected}  {result.latency_ms:.0f} ms"
+        return f"{stamp}  {len(result.observations):3d} aircraft{rejected}  {result.latency_ms:.0f} ms{'  fast' if fast else ''}"
     return f"{stamp}  ERROR {result.error}"
 
 
@@ -102,10 +103,15 @@ async def _collect(config: cfg.Config, duration_s: float | None, quiet: bool) ->
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
-    on_poll = None if quiet else (lambda r: typer.echo(_status_line(r)))
     timeout = httpx.Timeout(settings.timeout_s)
+    # Headless: the catalog without registry lookups (category A7 still counts as a helicopter)
+    identity = RegistryCache(None, catalog=_catalog(config))
     async with httpx.AsyncClient(timeout=timeout, headers={"User-Agent": USER_AGENT}) as client:
-        collector = Collector(config, provider, store, client, on_poll=on_poll)
+        collector: Collector | None = None
+        on_poll = None if quiet else (lambda r: typer.echo(_status_line(r, bool(collector and collector.fast))))
+        collector = Collector(
+            config, provider, store, client, on_poll=on_poll, fast_trigger=make_fast_trigger(config, identity)
+        )
         session_id = collector.start_session("collect")
         reason = "error"
         try:
@@ -129,7 +135,9 @@ def collect(
     duration_s = parse_duration(duration) if duration else None
     c = config.collector
     typer.echo(
-        f"Collecting from {c.provider} every {c.poll_interval_s:g}s within {config.area.collection_radius_nm:g} NM"
+        f"Collecting from {c.provider} every {c.poll_interval_s:g}s"
+        + (f" ({c.fast_interval_s:g}s with a helicopter nearby)" if c.fast_interval_s else "")
+        + f" within {config.area.collection_radius_nm:g} NM"
         + (f" for {duration}" if duration else "")
         + ". Data: adsb.fi (https://adsb.fi), personal noncommercial use."
     )
@@ -261,7 +269,6 @@ def export(
 ) -> None:
     """Export recorded data with provenance (home coordinates are never included)."""
     from airspace import export as export_mod
-    from airspace.replay import RegistryCache
 
     config = _load(config_file)
     if format not in ("geojson", "json", "flighttracer"):

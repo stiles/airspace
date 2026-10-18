@@ -48,11 +48,17 @@ class Collector(BaseModel):
     schema_error_limit: int = Field(default=3, ge=1)
     # Gzipped raw responses, for diagnosing the provider; about 1 MB/hour
     store_raw: bool = False
+    # Poll this often while a helicopter or public-safety/news aircraft is airborne in the
+    # visible area, and for fast_hold_s after; 0 turns fast polling off. adsb.fi allows 1 request/s.
+    fast_interval_s: float = Field(default=2.0, ge=0)
+    fast_hold_s: float = Field(default=60.0, ge=0)
 
     @model_validator(mode="after")
     def timeout_below_interval(self) -> Collector:
         if self.timeout_s >= self.poll_interval_s:
             raise ValueError("timeout_s must be shorter than poll_interval_s")
+        if self.fast_interval_s and not 1.0 <= self.fast_interval_s <= self.poll_interval_s:
+            raise ValueError("fast_interval_s must be 0 (off) or between 1 and poll_interval_s")
         return self
 
 
@@ -134,6 +140,9 @@ max_backoff_s = 300.0
 schema_error_limit = 3
 # Keep gzipped raw responses, about 1 MB/hour (for diagnosing the provider)
 store_raw = false
+# Faster polling while a helicopter or public-safety/news aircraft is in the visible area; 0 is off
+fast_interval_s = 2.0
+fast_hold_s = 60.0
 
 [freshness]
 fade_s = 20.0

@@ -13,7 +13,10 @@ from datetime import UTC, datetime, timedelta
 import httpx
 
 from airspace import procinfo
+from airspace.catalog import PUBLIC_SAFETY
+from airspace.classify import GYROPLANE, ROTORCRAFT
 from airspace.config import Config
+from airspace.geometry import distance_m
 from airspace.models import ErrorKind, PollResult
 from airspace.providers.base import Provider, fetch
 from airspace.storage import Store
@@ -26,6 +29,44 @@ SLEEP_DETECT_S = 5.0
 WAIT_STEP_S = 1.0
 # Retention pruning and the memory reading run on start and then this often (wall clock)
 MAINTENANCE_S = 3600.0
+
+
+# Cataloged roles that switch on fast polling, besides any helicopter
+FAST_ROLES = PUBLIC_SAFETY | {"news"}
+
+
+def make_fast_trigger(config: Config, identity=None) -> Callable[[PollResult], bool]:
+    """True when the poll has an airborne helicopter or a fast-role aircraft inside the visible
+    area with a position no older than the fade threshold.
+
+    `identity` is a RegistryCache (classification and catalog); without one, only ADS-B
+    category A7 counts.
+    """
+    home, radius, fade_s = config.home, config.visible_radius_m, config.freshness.fade_s
+
+    def trigger(result: PollResult) -> bool:
+        for o in result.observations:
+            if o.on_ground or o.position_at is None:
+                continue
+            if o.provider_at and (o.provider_at - o.position_at).total_seconds() > fade_s:
+                continue
+            if distance_m(home.latitude, home.longitude, o.latitude, o.longitude) > radius:
+                continue
+            if identity is None:
+                if o.category == "A7":
+                    return True
+                continue
+            kind = identity.classify(o.aircraft_id, o.category).kind
+            if kind in (ROTORCRAFT, GYROPLANE):
+                return True
+            op = identity.operator(
+                o.aircraft_id, kind=kind, registration=o.registration, callsign=o.callsign, owner=o.owner_operator
+            )
+            if op and op.role in FAST_ROLES:
+                return True
+        return False
+
+    return trigger
 
 
 @dataclass
@@ -47,6 +88,7 @@ class Collector:
         jitter: Callable[[float, float], float] = random.uniform,
         on_poll: Callable[[PollResult], None] | None = None,
         memory: Callable[[], procinfo.Memory] = procinfo.memory,
+        fast_trigger: Callable[[PollResult], bool] | None = None,
     ):
         self.config = config
         self.provider = provider
@@ -57,6 +99,10 @@ class Collector:
         self.on_poll = on_poll
         self.memory = memory
         self._next_maintenance: float | None = None
+        self.fast_trigger = fast_trigger
+        # Monotonic time until which polling stays fast; `fast` is the mode of the next poll
+        self._fast_until: float | None = None
+        self.fast = False
 
         self.session_id: int | None = None
         self.paused: str | None = None
@@ -71,7 +117,7 @@ class Collector:
     async def poll_once(self) -> PollResult:
         home, area = self.config.home, self.config.area
         result = await fetch(self.provider, self.client, home.latitude, home.longitude, area.collection_radius_nm)
-        self.store.record_poll(self.session_id, result)
+        self.store.record_poll(self.session_id, result, fast=self.fast)
         self.last_result = result
         if self.on_poll:
             self.on_poll(result)
@@ -111,7 +157,9 @@ class Collector:
         if result.ok:
             self.consecutive_failures = 0
             self.consecutive_schema_errors = 0
-            return interval
+            return self._interval_after_success(result, interval)
+        # Failures always back off from the normal interval
+        self._set_fast(False)
 
         if result.error_kind is ErrorKind.FATAL:
             self.paused = f"{result.error}; client errors count toward the provider's limit"
@@ -128,6 +176,28 @@ class Collector:
         if result.error_kind is ErrorKind.RATE_LIMITED and result.retry_after_s is not None:
             delay = max(delay, result.retry_after_s)
         return delay
+
+    def _interval_after_success(self, result: PollResult, interval: float) -> float:
+        settings = self.config.collector
+        if not settings.fast_interval_s or self.fast_trigger is None:
+            return interval
+        now = self.clock.monotonic()
+        try:
+            triggered = self.fast_trigger(result)
+        except Exception:
+            log.exception("fast-poll trigger failed")
+            triggered = False
+        if triggered:
+            self._fast_until = now + settings.fast_hold_s
+        self._set_fast(self._fast_until is not None and now < self._fast_until)
+        return settings.fast_interval_s if self.fast else interval
+
+    def _set_fast(self, fast: bool) -> None:
+        if fast != self.fast:
+            log.info("fast polling %s", f"on ({self.config.collector.fast_interval_s:g}s)" if fast else "off")
+        self.fast = fast
+        if not fast:
+            self._fast_until = None
 
     async def run(self, duration_s: float | None = None, stop: asyncio.Event | None = None) -> str:
         """Poll until the duration elapses (wall clock), `stop` is set or collection pauses. Returns the reason."""

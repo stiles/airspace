@@ -41,7 +41,9 @@ CREATE TABLE IF NOT EXISTS polls (
     error TEXT,
     retry_after_s REAL,
     gap_s REAL,
-    response_bytes INTEGER
+    response_bytes INTEGER,
+    -- 1 when made in fast mode (a helicopter or public-safety aircraft nearby)
+    fast INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS polls_session_time ON polls(session_id, requested_at);
 
@@ -119,7 +121,16 @@ def connect(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after a database was created."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(polls)")}
+    if "fast" not in columns:
+        with conn:
+            conn.execute("ALTER TABLE polls ADD COLUMN fast INTEGER NOT NULL DEFAULT 0")
 
 
 def observation_from_row(row: sqlite3.Row) -> Observation:
@@ -185,13 +196,13 @@ class Store:
                 (to_iso(utcnow()), reason, session_id),
             )
 
-    def record_poll(self, session_id: int, result: PollResult) -> int:
+    def record_poll(self, session_id: int, result: PollResult, *, fast: bool = False) -> int:
         """Write the poll and its observations in one transaction."""
         with self.conn:
             cur = self.conn.execute(
                 """INSERT INTO polls (session_id, kind, requested_at, received_at, provider_at, status_code,
-                       latency_ms, accepted, rejected, error_kind, error, retry_after_s, response_bytes)
-                   VALUES (?, 'poll', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       latency_ms, accepted, rejected, error_kind, error, retry_after_s, response_bytes, fast)
+                   VALUES (?, 'poll', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     session_id,
                     to_iso(result.requested_at),
@@ -205,6 +216,7 @@ class Store:
                     result.error,
                     result.retry_after_s,
                     len(result.raw_body) if result.raw_body is not None else None,
+                    int(fast),
                 ),
             )
             poll_id = cur.lastrowid

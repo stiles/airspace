@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from airspace.collector import Clock, Collector
+from airspace.collector import Clock, Collector, make_fast_trigger
 from airspace.config import Config
 from airspace import export as export_mod
 from airspace import procinfo
@@ -65,7 +65,8 @@ class LiveService:
             timeout=httpx.Timeout(settings.timeout_s), headers={"User-Agent": USER_AGENT}, transport=self.transport
         )
         self.collector = Collector(
-            self.config, get_provider(settings.provider), self.store, self.client, clock=self.clock, on_poll=self._on_poll
+            self.config, get_provider(settings.provider), self.store, self.client, clock=self.clock, on_poll=self._on_poll,
+            fast_trigger=make_fast_trigger(self.config, self.cache),
         )
         self.session_id = self.collector.start_session("serve")
         self.task = asyncio.create_task(self._run())
@@ -182,6 +183,7 @@ def create_app(
                 "median": statistics.median(ages) if ages else None,
                 "max": max(ages) if ages else None,
             },
+            "fast_polling": bool(service.collector and service.collector.fast),
             "registry_lookups": service.cache.registry is not None,
             "catalog_aircraft": len(service.cache.catalog) if service.cache.catalog else 0,
             "process": procinfo.memory().as_dict(),
