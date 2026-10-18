@@ -70,14 +70,15 @@ def init(
         typer.echo(f"{path} already exists; use --force to overwrite.", err=True)
         raise typer.Exit(1)
     if demo:
-        lat, lon, label = cfg.DEMO_LATITUDE, cfg.DEMO_LONGITUDE, "West LA demo (approximate)"
+        lat, lon, label, title = cfg.DEMO_LATITUDE, cfg.DEMO_LONGITUDE, "West LA demo (approximate)", "Airspace"
     else:
         typer.echo("Enter the home point in decimal degrees. It stays in this local file, outside Git.")
         lat = typer.prompt("Latitude", type=float)
         lon = typer.prompt("Longitude", type=float)
         label = typer.prompt("Label", default="Home")
+        title = typer.prompt("Page title, e.g. Jim's Airspace", default="Airspace")
     try:
-        text = cfg.render(lat, lon, label)
+        text = cfg.render(lat, lon, label, title)
     except ValueError as exc:
         typer.echo(f"Invalid coordinates:\n{exc}", err=True)
         raise typer.Exit(2) from None
@@ -209,8 +210,10 @@ PortOption = Annotated[int, typer.Option(help="Port on 127.0.0.1")]
 def _serve(config: cfg.Config, mode: str, port: int) -> None:
     import uvicorn
 
-    from airspace.api import create_app
+    from airspace.api import create_app, frontend_problem
 
+    if problem := frontend_problem():
+        typer.echo(f"Warning: {problem}", err=True)
     # One worker and no auto-reload, so a second collector can never start
     uvicorn.run(create_app(config, mode=mode), host="127.0.0.1", port=port, workers=1, reload=False)
 

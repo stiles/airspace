@@ -30,7 +30,7 @@ What's flying near home right now? Airspace is a local aircraft tracker. It poll
 ```bash
 git clone https://github.com/stiles/airspace.git && cd airspace
 uv sync --extra enrich                  # drop --extra enrich to skip FAA registry lookups
-uv run airspace init                    # prompts for home coordinates; writes airspace.toml
+uv run airspace init                    # prompts for home coordinates and a page title; writes airspace.toml
 
 echo 'VITE_MAPBOX_TOKEN=pk....' > web/.env.local
 cd web && npm install && npm run build && cd ..
@@ -40,11 +40,13 @@ uv run airspace serve                   # collector + dashboard at http://127.0.
 
 `airspace init --demo` uses an approximate West LA center instead of prompting. `airspace.toml`, `web/.env.local`, `data/` and `web/dist/` are all gitignored. The token is built into the bundle, so restrict it to `http://127.0.0.1:*` in your Mapbox account.
 
+After a `git pull`, rebuild the dashboard (`cd web && npm run build`); `web/dist/` isn't tracked, so the old build keeps serving until you do. `airspace serve` warns when the build is missing or older than its source. `init` won't overwrite an existing `airspace.toml`, so add new settings such as `title` to it by hand.
+
 ## Usage
 
 | Command | What it does |
 | --- | --- |
-| `airspace init` | Write `airspace.toml` with your home coordinates |
+| `airspace init` | Write `airspace.toml` with your home coordinates and page title |
 | `airspace serve` | Run the collector and the dashboard/API together |
 | `airspace collect --duration 2h` | Record headlessly, without the dashboard |
 | `airspace report --session latest` | Print a coverage report for a session |

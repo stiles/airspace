@@ -167,7 +167,7 @@ latitude = {latitude}
 longitude = {longitude}
 label = "{label}"
 # Page header and browser tab
-# title = "Jim's Airspace"
+title = "{title}"
 
 [area]
 visible_radius_mi = 5.0
@@ -207,7 +207,13 @@ catalogs = ["catalogs"]
 """
 
 
-def render(latitude: float, longitude: float, label: str) -> str:
-    text = TEMPLATE.format(latitude=latitude, longitude=longitude, label=label.replace('"', ""))
+def _toml_text(value: str) -> str:
+    return value.replace("\\", "").replace('"', "").strip()
+
+
+def render(latitude: float, longitude: float, label: str, title: str = "Airspace") -> str:
+    text = TEMPLATE.format(
+        latitude=latitude, longitude=longitude, label=_toml_text(label), title=_toml_text(title) or "Airspace"
+    )
     Config.model_validate(tomllib.loads(text))
     return text

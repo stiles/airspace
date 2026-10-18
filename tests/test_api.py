@@ -123,3 +123,22 @@ def test_session_closed_on_shutdown(config, ok_transport):
     with TestClient(create_app(config, mode="replay")) as client:
         (session,) = client.get("/api/sessions").json()
         assert session["end_reason"] == "stopped" and session["ended_at"]
+
+
+def test_frontend_problem_flags_missing_and_stale_builds(tmp_path):
+    import os
+
+    from airspace.api import frontend_problem
+
+    dist = tmp_path / "web" / "dist"
+    (tmp_path / "web" / "src").mkdir(parents=True)
+    source = tmp_path / "web" / "src" / "App.svelte"
+    source.write_text("<h1>Airspace</h1>")
+    assert "isn't built" in frontend_problem(dist)
+    dist.mkdir()
+    (dist / "index.html").write_text("<html></html>")
+    os.utime(source, (time.time() + 60, time.time() + 60))
+    assert "older than its source" in frontend_problem(dist)
+    os.utime(dist / "index.html", (time.time() + 120, time.time() + 120))
+    assert frontend_problem(dist) is None
+    assert frontend_problem(tmp_path / "elsewhere" / "dist") is None  # no source to compare

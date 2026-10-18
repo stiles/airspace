@@ -32,6 +32,23 @@ log = logging.getLogger(__name__)
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 
 
+def frontend_problem(dist: Path = WEB_DIST) -> str | None:
+    """A missing dashboard build, or one older than its source (web/dist is built locally,
+    so `git pull` doesn't update it)."""
+    web = dist.parent
+    if not (web / "src").is_dir():
+        return None  # an installed package without the frontend source
+    built = dist / "index.html"
+    rebuild = "run `cd web && npm install && npm run build`"
+    if not built.exists():
+        return f"the dashboard isn't built; {rebuild}"
+    sources = [p for p in (web / "src").rglob("*") if p.is_file()]
+    sources += [p for p in (web / "index.html", web / "package.json") if p.exists()]
+    if any(p.stat().st_mtime > built.stat().st_mtime for p in sources):
+        return f"the dashboard build is older than its source; {rebuild}"
+    return None
+
+
 class LiveService:
     """Owns the collector task and the live state builder."""
 

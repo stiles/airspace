@@ -1,3 +1,5 @@
+import tomllib
+
 import pytest
 from pydantic import ValidationError
 
@@ -30,5 +32,8 @@ def test_provider_radius_cap():
 
 def test_template_renders_valid_config():
     assert "latitude = 34.0" in render(34.0, -118.42, "Home")
+    text = render(34.0, -118.42, "Home", 'Jim\'s "Air" space')
+    assert tomllib.loads(text)["home"]["title"] == "Jim's Air space"
+    assert tomllib.loads(render(34.0, -118.42, "Home"))["home"]["title"] == "Airspace"
     with pytest.raises(ValueError):
         render(-118.42, 34.0, "Reversed")
