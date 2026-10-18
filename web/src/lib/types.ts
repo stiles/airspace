@@ -107,7 +107,7 @@ export interface Snapshot {
   session_id?: number;
   source: { provider: string; name?: string; url?: string };
   area: {
-    home: { latitude: number; longitude: number; label: string };
+    home: { latitude: number; longitude: number; label: string; title?: string };
     visible_radius_m: number;
     collection_radius_m: number;
     max_altitude_baro_ft: number | null;

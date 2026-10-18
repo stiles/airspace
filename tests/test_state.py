@@ -131,3 +131,9 @@ def test_sorted_by_distance_with_classification(builder):
     assert [a["id"] for a in snap["aircraft"]] == ["heli", "far"]
     assert snap["aircraft"][0]["class"] == "rotorcraft"
     assert snap["aircraft"][0]["in_latest_response"] is True
+
+
+def test_snapshot_carries_page_title(config):
+    assert StateBuilder(config).snapshot(at(0))["area"]["home"]["title"] == "Airspace"
+    config.home.title = "Jim's Airspace"
+    assert StateBuilder(config).snapshot(at(0))["area"]["home"]["title"] == "Jim's Airspace"

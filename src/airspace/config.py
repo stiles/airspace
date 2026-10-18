@@ -21,6 +21,8 @@ class Home(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     label: str = "Home"
+    # Page header and browser tab, e.g. "Jim's Airspace"
+    title: str = Field(default="Airspace", min_length=1, max_length=60)
 
 
 class Area(BaseModel):
@@ -164,6 +166,8 @@ TEMPLATE = """\
 latitude = {latitude}
 longitude = {longitude}
 label = "{label}"
+# Page header and browser tab
+# title = "Jim's Airspace"
 
 [area]
 visible_radius_mi = 5.0

@@ -58,7 +58,7 @@ export function snapshot(overrides: Partial<Snapshot> = {}, feed: Partial<Feed> 
     session_id: 1,
     source: { provider: 'adsbfi', name: 'adsb.fi', url: 'https://adsb.fi' },
     area: {
-      home: { latitude: 34.0, longitude: -118.42, label: 'Home' },
+      home: { latitude: 34.0, longitude: -118.42, label: 'Home', title: 'Airspace' },
       visible_radius_m: 8046.72,
       collection_radius_m: 18520,
       max_altitude_baro_ft: null,

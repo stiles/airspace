@@ -108,7 +108,7 @@ Exports include source, terms and timestamp provenance and never include the hom
 
 | Section | Key settings |
 | --- | --- |
-| `[home]` | `latitude`, `longitude`, `label` |
+| `[home]` | `latitude`, `longitude`, `label`, `title` (page header and browser tab; default `Airspace`) |
 | `[area]` | `visible_radius_mi` (5), `collection_radius_nm` (10), `max_altitude_baro_ft` (initial filter preset) |
 | `[collector]` | `poll_interval_s` (10), `fast_interval_s` (2; 0 turns it off), `fast_hold_s` (60), `fast_radius_mi` (unset: the visible radius), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (false; keep gzipped raw responses) |
 | `[freshness]` | `fade_s` (20), `hide_s` (60), `trail_gap_s` (30), `trail_duration_s` (300) |

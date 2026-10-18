@@ -87,6 +87,15 @@ describe('App', () => {
     expect(screen.getByTestId('detail')).toHaveTextContent('N225LA');
   });
 
+  it('titles the page from the config', async () => {
+    const base = snapshot();
+    const fetchFn = server([snapshot({ area: { ...base.area, home: { ...base.area.home, title: "Jim's Airspace" } } })]);
+    render(App, { fetchFn, pollMs: POLL });
+    await advance(0);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent("Jim's Airspace");
+    expect(document.title).toBe("Jim's Airspace");
+  });
+
   it('creates map layers once and only replaces data on updates', async () => {
     const fetchFn = server([snapshot({ aircraft: [heli, jet] })]);
     render(App, { fetchFn, pollMs: POLL });

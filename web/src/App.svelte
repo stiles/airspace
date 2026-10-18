@@ -66,6 +66,10 @@
   );
   const visibleLabel = $derived(snapshot ? miles(snapshot.area.visible_radius_m) : 'visible area');
   const attribution = $derived(snapshot?.source);
+  const title = $derived(snapshot?.area.home.title || 'Airspace');
+  $effect(() => {
+    document.title = title;
+  });
   const sessionId = $derived(mode === 'live' ? (liveSnapshot?.session_id ?? null) : replay.sessionId);
 
   let stopLive: (() => void) | undefined;
@@ -166,7 +170,7 @@
 
 <div class="app" class:compact>
   <header class="bar">
-    <h1>Airspace</h1>
+    <h1>{title}</h1>
     {#if !replayOnly}
       <div class="modes" role="group" aria-label="Mode">
         <button type="button" aria-pressed={mode === 'live'} onclick={enterLive}>Live</button>
