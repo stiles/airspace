@@ -110,13 +110,13 @@ Exports include source, terms and timestamp provenance and never include the hom
 | --- | --- |
 | `[home]` | `latitude`, `longitude`, `label` |
 | `[area]` | `visible_radius_mi` (5), `collection_radius_nm` (10), `max_altitude_baro_ft` (initial filter preset) |
-| `[collector]` | `poll_interval_s` (10), `fast_interval_s` (2; 0 turns it off), `fast_hold_s` (60), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (false; keep gzipped raw responses) |
+| `[collector]` | `poll_interval_s` (10), `fast_interval_s` (2; 0 turns it off), `fast_hold_s` (60), `fast_radius_mi` (unset: the visible radius), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (false; keep gzipped raw responses) |
 | `[freshness]` | `fade_s` (20), `hide_s` (60), `trail_gap_s` (30), `trail_duration_s` (300) |
 | `[behavior]` | Circling, hovering and low-flight thresholds (see below) and `history_s` (900) |
 | `[storage]` | `data_dir` (`data`), `retention_days` (7; 0 keeps everything) |
 | `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off. `catalogs`: operator catalog files or folders (`catalogs`) |
 
-Fast polling starts when an airborne helicopter, or a cataloged police, fire, medical or news aircraft, is inside the visible area with a position under `fade_s` old, and stays on for `fast_hold_s` after the last one. adsb.fi allows one request per second, so `fast_interval_s` can't go below 1. Failures drop back to the normal interval and its backoff. Each poll records whether it was fast, and `airspace report` shows the share.
+Fast polling starts when an airborne helicopter, or a cataloged police, fire, medical or news aircraft, is inside the visible area with a position under `fade_s` old, and stays on for `fast_hold_s` after the last one. Set `fast_radius_mi` to trigger farther out, up to the collection radius. Replaying a night's recording, a 5-mile trigger polled fast 11% of the time (about 520 requests an hour); the full 11.5-mile collection area, 67% (about 1,320). adsb.fi allows one request per second, so `fast_interval_s` can't go below 1. Failures drop back to the normal interval and its backoff. Each poll records whether it was fast, and `airspace report` shows the share.
 
 The collector prunes recordings older than `retention_days` when it starts and every hour after, removing sessions it empties along with their raw files. SQLite grows about 3–4 MB/hour, so a week takes roughly 600 MB; `store_raw = true` adds about 1 MB/hour. Deleted space is reused rather than returned to the disk; run `sqlite3 data/airspace.sqlite VACUUM` with the collector stopped to shrink the file.
 

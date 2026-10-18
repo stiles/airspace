@@ -52,6 +52,9 @@ class Collector(BaseModel):
     # visible area, and for fast_hold_s after; 0 turns fast polling off. adsb.fi allows 1 request/s.
     fast_interval_s: float = Field(default=2.0, ge=0)
     fast_hold_s: float = Field(default=60.0, ge=0)
+    # How far out an aircraft triggers fast polling; unset means the visible area. Up to the
+    # collection radius (about 11.5 mi at 10 NM): wider costs more requests.
+    fast_radius_mi: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def timeout_below_interval(self) -> Collector:
@@ -120,6 +123,11 @@ class Config(BaseModel):
         provider = get_provider(self.collector.provider)
         if self.area.collection_radius_nm > provider.max_radius_nm:
             raise ValueError(f"{provider.name} allows at most {provider.max_radius_nm} NM")
+        if self.fast_radius_m > self.collection_radius_m + 1:
+            raise ValueError(
+                f"fast_radius_mi ({self.collector.fast_radius_mi}) exceeds the collection radius "
+                f"({self.collection_radius_m / METERS_PER_MILE:.1f} mi)"
+            )
         return self
 
     @property
@@ -129,6 +137,12 @@ class Config(BaseModel):
     @property
     def collection_radius_m(self) -> float:
         return self.area.collection_radius_nm * METERS_PER_NM
+
+    @property
+    def fast_radius_m(self) -> float:
+        if self.collector.fast_radius_mi is None:
+            return self.visible_radius_m
+        return self.collector.fast_radius_mi * METERS_PER_MILE
 
 
 def config_path(path: Path | None = None) -> Path:
@@ -167,6 +181,8 @@ store_raw = false
 # Faster polling while a helicopter or public-safety/news aircraft is in the visible area; 0 is off
 fast_interval_s = 2.0
 fast_hold_s = 60.0
+# Trigger fast polling farther out, up to the collection radius (about 11.5 mi); more requests
+# fast_radius_mi = 11.5
 
 [freshness]
 fade_s = 20.0

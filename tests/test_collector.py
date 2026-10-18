@@ -209,6 +209,10 @@ def test_fast_interval_validated(config):
     data["collector"]["fast_interval_s"] = 0.5
     with pytest.raises(ValueError, match="fast_interval_s"):
         Config.model_validate(data)
+    data["collector"]["fast_interval_s"] = 2.0
+    data["collector"]["fast_radius_mi"] = 12  # beyond 10 NM
+    with pytest.raises(ValueError, match="fast_radius_mi"):
+        Config.model_validate(data)
 
 
 def test_fast_trigger_rules(config):
@@ -225,6 +229,10 @@ def test_fast_trigger_rules(config):
     assert not plain(poll(t, [obs(t, "h1", category="A7", miles=2, on_ground=True)]))
     assert not plain(poll(t, [obs(t, "h1", category="A7", miles=2, age=45)]))  # stale position
     assert not plain(poll(t, [obs(t, "j1", category="A3", miles=2)]))
+
+    config.collector.fast_radius_mi = 10
+    assert make_fast_trigger(config)(poll(t, [obs(t, "h1", category="A7", miles=8)]))
+    config.collector.fast_radius_mi = None
 
     catalog = Catalog()
     catalog._pattern_row({"pattern": "POLICE", "operator": "", "role": "police", "source": "test"})

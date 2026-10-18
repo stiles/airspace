@@ -36,13 +36,13 @@ FAST_ROLES = PUBLIC_SAFETY | {"news"}
 
 
 def make_fast_trigger(config: Config, identity=None) -> Callable[[PollResult], bool]:
-    """True when the poll has an airborne helicopter or a fast-role aircraft inside the visible
-    area with a position no older than the fade threshold.
+    """True when the poll has an airborne helicopter or a fast-role aircraft within the fast
+    radius (the visible area unless configured) with a position no older than the fade threshold.
 
     `identity` is a RegistryCache (classification and catalog); without one, only ADS-B
     category A7 counts.
     """
-    home, radius, fade_s = config.home, config.visible_radius_m, config.freshness.fade_s
+    home, radius, fade_s = config.home, config.fast_radius_m, config.freshness.fade_s
 
     def trigger(result: PollResult) -> bool:
         for o in result.observations:

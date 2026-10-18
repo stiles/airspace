@@ -136,7 +136,7 @@ def collect(
     c = config.collector
     typer.echo(
         f"Collecting from {c.provider} every {c.poll_interval_s:g}s"
-        + (f" ({c.fast_interval_s:g}s with a helicopter nearby)" if c.fast_interval_s else "")
+        + (f" ({c.fast_interval_s:g}s with a helicopter within {config.fast_radius_m / cfg.METERS_PER_MILE:.1f} mi)" if c.fast_interval_s else "")
         + f" within {config.area.collection_radius_nm:g} NM"
         + (f" for {duration}" if duration else "")
         + ". Data: adsb.fi (https://adsb.fi), personal noncommercial use."
