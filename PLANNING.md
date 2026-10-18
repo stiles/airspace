@@ -1,6 +1,8 @@
-# Airspace: local aircraft tracker technical plan
+# Airspace: plan and development notes
 
-Prepared October 17, 2026. Working project name: **Airspace**; proposed terminal command: `airspace`. Check naming availability before publishing a package. This document specifies a build; it does not represent a tested implementation or a completed coverage trial.
+The original technical plan (prepared October 17, 2026, as SPEC.md), with the decisions made while building each milestone and notes on how the pieces work. The [README](README.md) covers installing and using the tool.
+
+**Status:** milestones 1–4 are built. Milestone 5's soak test is running (see [5. Decide on continuous operation](#5-decide-on-continuous-operation)).
 
 ## Objective
 
@@ -255,6 +257,59 @@ Built October 17, 2026. Decisions made during implementation:
 ### 5. Decide on continuous operation
 
 Run an eight-hour soak test after the shorter milestones pass. Inspect memory, database growth, request counts and reconnection behavior. Only then decide whether the API is sufficient or a local receiver would be worthwhile. Hardware selection follows a reception/antenna assessment; MLAT-only position recovery generally needs a receiver network, so one receiver does not guarantee complete helicopter coverage.
+
+In progress: session 4, `airspace serve` under `caffeinate -i`, started October 18, 2026, 00:03 UTC and left running overnight. At 3 hr 47 min:
+
+- 1,363 of 1,363 polls succeeded (latency median 258 ms, p95 340 ms), with no host sleep.
+- Physical memory footprint flat at about 140 MB (peak 145 MB). RSS reads about 458 MB because it counts freed pages macOS hasn't reclaimed.
+- 30 open files and two sockets (the API listener and one keep-alive connection to adsb.fi).
+- SQLite grows 3.9 MB/hour and gzipped raw responses 1.2 MB/hour, about 120 MB/day together. The WAL stays near 4 MB, so checkpoints are keeping up.
+- Airborne p95 position age in the visible area 5.5 s; 18 rotorcraft, most at 97–99% continuity.
+
+Open items:
+
+- Reconnection hasn't been exercised: the provider never failed. Test by dropping Wi-Fi for about two minutes.
+- `storage.retention_days` is in the config but nothing enforces it, so the database grows without bound. Continuous operation needs pruning of old observations (and probably `store_raw = false`).
+- Final readings after the overnight run, comparing the first and second halves for drift.
+
+## Implementation notes
+
+Details that matter when changing the code. Moved from the README.
+
+### Collector
+
+- One request at a time on a fixed schedule; a slow response delays the next poll rather than overlapping it.
+- Non-429 client errors pause collection instead of retrying, because adsb.fi counts them toward its rate limit. So do `schema_error_limit` consecutive schema errors (default three).
+- A 429 waits at least as long as `Retry-After`. Other failures back off exponentially with jitter, capped at `max_backoff_s`.
+- Sleep detection: macOS stops `time.monotonic` during sleep, so the collector compares wall-clock and monotonic deltas. A sleep is recorded as a gap; missed polls are not made up.
+- `fcntl.flock` on `data/collector.lock` keeps a second collector off the same data directory, whether it's `collect` or `serve`.
+- Read-only connections (replay, reports) use `PRAGMA query_only=ON`. `mode=ro` fails once the writer has exited and the `-shm` file is gone.
+
+### Report
+
+The report prints the milestone 1 gate plus latency, cached and repeated positions, null-field rates, observation gaps, possible TIS-B duplicates (only `~` IDs, which are non-ICAO), position age by source and storage per hour. Surface vehicles (C1–C5) are excluded. Intervals that contain the midpoint of a sleep window count as spanning sleep and are reported separately, not as coverage gaps.
+
+### API and state
+
+- `serve` runs one collector inside the API process, bound to `127.0.0.1` with one worker and no auto-reload. Reading the API never triggers a provider request.
+- Live state and `/api/replay` use the same state builder; replay reads through a read-only connection and sees only records received by the requested time.
+- Feed status: `starting`, `live`, `delayed` (no success for longer than the fade threshold), `degraded` (latest poll failed), `stale` (no success for longer than the hide threshold) or `paused` (collection stopped on an error that needs attention).
+- A `+` in an ISO time decodes to a space in a query string; `_parse_at` puts it back, and the CLI prints times with `Z`.
+
+### Dashboard
+
+- Svelte 5 (runes), TypeScript 6 (svelte-check doesn't support 7 yet), Vite and Mapbox GL JS 3.
+- Map layers are created once on load; each update only calls `setData` on the GeoJSON sources. Tests assert this with a Mapbox mock.
+- `lib/basemap.ts` recolors a classic style by layer type and id pattern, so it survives style revisions, and hides POI, transit and shield layers. Styles with imports (Mapbox Standard) are left alone.
+- The palette lives twice, in `lib/theme.ts` for the map and as CSS variables in `App.svelte`; keep them in step.
+- Overlays set `*-emissive-strength: 1` so Standard's night lighting doesn't dim them. `line-gradient` trails need `lineMetrics: true` on the source and can't vary color per feature, so each trail color has its own layer.
+- Positions keep aging on the browser clock between polls, using the server's thresholds. If the local server stops responding, markers fade and disappear instead of freezing.
+- The map resizes with its container (compact mode, the replay bar) and refits the visible area when the layout switches.
+- Browser checks use Playwright with the cached Chromium and SwiftShader flags (`--use-angle=swiftshader --enable-unsafe-swiftshader`), against live data and replays of session 1.
+
+### Test fixture
+
+`tests/fixtures/adsbfi_v3_la.json` is a real adsb.fi v3 response captured October 17, 2026, at the demo center. The `dst` and `dir` fields were removed and owner names redacted.
 
 ## Validation that matters
 

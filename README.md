@@ -1,121 +1,154 @@
 # Airspace
 
-A local tracker for aircraft flying near a home point, with attention to helicopters and low-altitude traffic. See [SPEC.md](SPEC.md) for the plan.
+What's flying near home right now? Airspace is a local aircraft tracker. It polls the adsb.fi open data API for traffic around a home point, records it, and shows it on a radar-style Mapbox dashboard, with particular attention to helicopters and low-altitude traffic.
 
 ![Airspace dashboard: a radar-style dark green map of West Los Angeles with mile rings, phosphor-green aircraft and trails, helicopters in amber, and a list of nearby aircraft](img/airspace_example.png)
 
-Milestones 1 through 4 are built: a headless collector, a coverage report, a local state service and API, a Mapbox dashboard, and replay with exports. Milestone 5, an eight-hour soak test and a decision on continuous operation, comes next.
+## Features
 
-## Setup
+- **Live map:** aircraft within a configurable radius, rotated by ground track, with fading trails, altitude labels, mile rings, a legend and hover cards. Helicopters are amber.
+- **Honest freshness:** positions age on screen between updates and fade, then disappear, when they go stale. Any outage turns the header red and grays out the map, so it never reads as an empty sky.
+- **Helicopter classification:** ADS-B emitter category A7, then the FAA registry through [hangarbay](https://github.com/stiles/hangarbay) when it's installed.
+- **Recording and replay:** every poll is stored in SQLite. Replay any session on a timeline that shows failed polls, laptop sleep and helicopter activity.
+- **Exports:** JSON or GeoJSON (tracks or points) with provenance, and run folders for [FlightTracer](https://github.com/stiles/flight-tracer).
+- **Coverage reports:** request success, position age, helicopter continuity, gaps and storage for any recorded session.
+- **Compact mode:** a map-only layout for a small always-on window.
+- **Local only:** one collector, one request every 10 seconds, an API bound to `127.0.0.1`. The browser never contacts the data provider.
+
+## Requirements
+
+- macOS or Linux, Python 3.12+ and [uv](https://docs.astral.sh/uv/)
+- Node.js 20.19+ or 22.12+ to build the dashboard
+- A public Mapbox token (`pk.`) for the map
+- Optional: [hangarbay](https://github.com/stiles/hangarbay) with a downloaded FAA registry, for helicopter lookups beyond ADS-B category
+
+## Quick start
 
 ```bash
-uv sync --extra enrich      # drop --extra enrich to skip FAA registry lookups
-uv run airspace init        # prompts for home coordinates; writes airspace.toml (gitignored)
-uv run airspace init --demo # or use an approximate West LA demo center
+git clone https://github.com/stiles/airspace.git && cd airspace
+uv sync --extra enrich                  # drop --extra enrich to skip FAA registry lookups
+uv run airspace init                    # prompts for home coordinates; writes airspace.toml
+
+echo 'VITE_MAPBOX_TOKEN=pk....' > web/.env.local
+cd web && npm install && npm run build && cd ..
+
+uv run airspace serve                   # collector + dashboard at http://127.0.0.1:8000
 ```
 
-## Collect and report
+`airspace init --demo` uses an approximate West LA center instead of prompting. `airspace.toml`, `web/.env.local`, `data/` and `web/dist/` are all gitignored. The token is built into the bundle, so restrict it to `http://127.0.0.1:*` in your Mapbox account.
+
+## Usage
+
+| Command | What it does |
+| --- | --- |
+| `airspace init` | Write `airspace.toml` with your home coordinates |
+| `airspace serve` | Run the collector and the dashboard/API together |
+| `airspace collect --duration 2h` | Record headlessly, without the dashboard |
+| `airspace report --session latest` | Print a coverage report for a session |
+| `airspace sessions` | List recorded sessions |
+| `airspace replay --session latest` | Serve recorded data only, with no provider requests |
+| `airspace export --format geojson` | Export a session (see below) |
+
+Every command takes `--config` for a config file other than `airspace.toml`, and `--help` lists the rest. Only one collector can run against a data directory at a time, so `serve` refuses to start while `collect` is running, and vice versa.
+
+### Long runs
+
+macOS sleeps an idle laptop, and the collector records that as a gap rather than coverage. Wrap long runs in `caffeinate -i`, which blocks idle sleep while the command runs:
 
 ```bash
-uv run airspace collect --duration 2h
-uv run airspace report --session latest
-uv run airspace sessions
-```
-
-`collect` polls adsb.fi every 10 seconds, one request at a time, and writes to `data/airspace.sqlite`. With `store_raw = true` it also keeps gzipped raw responses in `data/raw/`. A file lock stops a second collector from writing to the same data directory. Ctrl-C ends the session cleanly.
-
-macOS sleeps an idle laptop, and the collector records that as a gap rather than coverage. For long runs, wrap the command in `caffeinate -i`, which blocks idle sleep for as long as the command runs:
-
-```bash
-caffeinate -i uv run airspace collect --duration 8h
 caffeinate -i uv run airspace serve
+caffeinate -i uv run airspace collect --duration 8h
 ```
 
 Closing the lid still sleeps most MacBooks; `caffeinate -s` also blocks system sleep, but only on AC power.
 
-Collection pauses instead of retrying on non-429 client errors, because adsb.fi counts those toward its rate limit, and after three consecutive schema errors. A 429 waits at least as long as `Retry-After`. Other failures back off exponentially with jitter. When the laptop sleeps, the collector records a gap and resumes without making up the missed polls.
+### Dashboard
 
-`report` prints the milestone 1 gate (request success, p95 position age, helicopter continuity), plus latency, cached and repeated positions, null-field rates, gaps, possible TIS-B duplicates and storage per hour. Surface vehicles (ADS-B categories C1 through C5) are excluded from the metrics.
+- **Map:** the side list sorts aircraft by distance. Click an aircraft on the map or in the list for details: identity, type, altitude, speed, vertical rate, position source and age. Labels show altitude in hundreds of feet (`015` is 1,500 ft barometric).
+- **Filters:** altitude presets, unknown altitude, on-ground aircraft and surface vehicles. Ground traffic is hidden by default to keep LAX out of the way. Filters run in the browser and never cause extra requests.
+- **Compact:** the button in the header switches to a map-only layout; clicking an aircraft pins its hover card. Small windows start compact.
+- **Replay:** use the Live/Replay switch. The timeline shows each poll (green succeeded, red failed, hatched while asleep) with an amber strip when a helicopter was in the feed. Drag to seek; space plays and pauses, ← and → step by poll, and the speed runs from 1× to 60×. The URL keeps `?session=&at=`, so any moment can be bookmarked.
 
-## Local API
+To use a different Mapbox style, add `VITE_MAPBOX_STYLE=mapbox://styles/...` to `web/.env.local` and rebuild. Classic styles are recolored into the radar palette; Mapbox Standard styles keep their own colors.
+
+### Exports
+
+From the replay bar (a whole session) or the detail panel (one aircraft), or on the command line:
 
 ```bash
-uv run airspace serve                     # collector + API on http://127.0.0.1:8000
-uv run airspace replay --session latest   # recorded data only, no provider requests
+uv run airspace export --session latest --format geojson --geometry tracks -o tracks.geojson
+uv run airspace export --format json --start 2026-10-17T19:00:00Z --end 2026-10-17T20:00:00Z -o hour.json
+uv run airspace export --format flighttracer --aircraft a1f0d8 -o runs/n224la
 ```
 
-`serve` runs one collector inside the API process and takes the same lock as `collect`, so it refuses to start while a `collect` run is active. It binds to `127.0.0.1` with one worker and no auto-reload. Interactive docs are at `/api/docs`.
+Exports include source, terms and timestamp provenance and never include the home point. See [docs/exports.md](docs/exports.md) for the formats.
+
+### API
+
+`serve` exposes a read-only JSON API at `http://127.0.0.1:8000`, with interactive docs at `/api/docs`. Coordinates are always `[longitude, latitude]`.
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/state` | Versioned snapshot: aircraft sorted by distance with freshness and trail segments, recently lost aircraft, entry/exit events, area, thresholds and feed status |
+| `GET /api/state` | Snapshot: aircraft by distance with freshness and trails, recently lost aircraft, entry/exit events, area and feed status |
 | `GET /api/aircraft/{id}` | One aircraft with owner/operator and recent positions |
-| `GET /api/health` | Collector status, feed status, position-age summary |
+| `GET /api/health` | Collector status, feed status and a position-age summary |
 | `GET /api/sessions` | Recorded sessions |
 | `GET /api/replay?session_id=&at=` | Snapshot rebuilt from records received by `at` (ISO 8601) |
+| `GET /api/sessions/{id}/timeline` | Per-poll outcomes and sleep gaps, for the replay bar |
+| `GET /api/sessions/{id}/export` | JSON or GeoJSON download, with `geometry`, `aircraft` (comma-separated) and a time window |
 
-Reading the API never triggers a provider request. The live state and `/api/replay` use the same state builder, and replay reads through a read-only SQLite connection. Coordinates are always `[longitude, latitude]`.
+## Configuration
 
-Feed status is one of `starting`, `live`, `delayed` (no success for longer than the fade threshold), `degraded` (latest poll failed), `stale` (no success for longer than the hide threshold) or `paused` (collection stopped on an error that needs attention). An outage shows up as `stale`, never as an empty sky.
+`airspace init` writes `airspace.toml` with every setting and its default:
 
-## Dashboard
+| Section | Key settings |
+| --- | --- |
+| `[home]` | `latitude`, `longitude`, `label` |
+| `[area]` | `visible_radius_mi` (5), `collection_radius_nm` (10), `max_altitude_baro_ft` (initial filter preset) |
+| `[collector]` | `poll_interval_s` (10), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (keep gzipped raw responses) |
+| `[freshness]` | `fade_s` (20), `hide_s` (60), `trail_gap_s` (30), `trail_duration_s` (300) |
+| `[storage]` | `data_dir` (`data`); `retention_days` isn't enforced yet, so the database grows until pruned |
+| `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off |
 
-The dashboard is Svelte 5, TypeScript, Vite and Mapbox GL JS, in `web/`. It needs a public Mapbox token (`pk.`), ideally restricted to `http://127.0.0.1:*`. Put it in `web/.env.local`, which Git ignores:
-
-```bash
-VITE_MAPBOX_TOKEN=pk....
-# Optional. Defaults to dark-v11, recolored into a radar scope at load. Standard styles work too
-# but keep their own colors:
-VITE_MAPBOX_STYLE=mapbox://styles/stiles/cmv5o51lp007201rogm24804g
-```
-
-Vite builds the token into the bundle, and `web/dist/` is gitignored too. Then:
-
-```bash
-cd web && npm install && npm run build && cd ..
-uv run airspace serve        # dashboard at http://127.0.0.1:8000
-```
-
-For frontend work, run `npm run dev` in `web/` while `airspace serve` is running. The dev server at http://127.0.0.1:5173 forwards `/api` to port 8000.
-
-**Replay:** use the Live/Replay switch in the header, or run `airspace replay` for recorded data only. The timeline bar shows every poll: green when it succeeded, red when it failed, hatched while the collector was asleep, with an amber strip when an ADS-B category A7 helicopter was in the feed. Drag or click to seek. The controls are play/pause (space), previous/next poll (← →), 1×–60× speed and a session picker. The URL keeps `?session=&at=`, so a moment can be bookmarked. Replay reads only records received by the playhead time.
-
-**Exports:** tracks, points or observations for a session from the replay bar, or one aircraft's tracks from the detail panel. See [docs/exports.md](docs/exports.md), which also covers the FlightTracer run-folder export.
-
-What the dashboard does:
-
-- **Map:** a north-up radar-scope look. `dark-v11` is recolored to dim greens with POI, transit and shield clutter hidden. Aircraft and rings are phosphor green, helicopters amber, and the selection and home point cyan. Trails fade like a phosphor afterglow. The palette lives in `web/src/lib/theme.ts` and as CSS variables in `App.svelte`. Overlays set emissive strength so Mapbox Standard styles' night lighting doesn't dim them. The map has mile rings, the visible boundary and the collection limit. Symbols are rotated by ground track. Helicopters get an amber rotor symbol only when the classifier says rotorcraft, and aircraft without a track get an unrotated symbol. Labels show altitude in hundreds of feet (`015` means 1,500 ft barometric).
-- **Legend and hover cards:** a legend in the lower left explains the symbols, rings and altitude labels; it folds away and remembers that. Hovering an aircraft shows its identity, type, altitude with a climb or descent arrow (300 ft/min or more), speed and distance from home, plus a note when the position is aging.
-- **Compact mode:** the Compact button in the header switches to a map-only layout for a small always-on window. It keeps the feed status, the aircraft count and the data credit, and drops the side panel. With no detail panel, clicking an aircraft pins its hover card. Windows narrower than 560 px or shorter than 420 px start compact, and the choice is remembered in the browser.
-- **Updates:** the browser reads `/api/state` every two seconds. That never triggers provider requests. Map layers are created once; each update only replaces source data.
-- **Filters:** altitude presets, unknown altitude (shown by default), on-ground aircraft and surface vehicles (hidden by default, to keep LAX traffic out of the way), and list-only-within-visible-radius. Filters run in the browser.
-- **Freshness:** positions keep aging on the browser's clock between updates. If the local server stops responding, markers fade and then disappear instead of freezing.
-- **Feed status:** any outage, upstream or local, turns the header red and grays out the map. It never reads as an empty sky. Replay shows the recorded feed status, so a recorded outage looks like one.
-
-```bash
-cd web && npm test && npm run check
-```
+Storage runs about 4 MB/hour in SQLite, plus about 1 MB/hour with `store_raw = true`.
 
 ## Helicopter classification
 
-The classifier tries these in order:
+The classifier tries these in order and records which rule decided:
 
 1. ADS-B emitter category `A7`.
-2. FAA registry aircraft type, looked up by ICAO hex in [hangarbay](https://github.com/stiles/hangarbay)'s local DuckDB at `~/.hangarbay/data/publish/registry.duckdb`. Code `6` is rotorcraft and `9` is gyroplane. This covers US-registered aircraft only, and the data is as current as your last `hangar update`.
+2. FAA registry aircraft type, by ICAO hex, from hangarbay's DuckDB at `~/.hangarbay/data/publish/registry.duckdb`. Code `6` is rotorcraft and `9` is gyroplane. US-registered aircraft only, as current as your last `hangar update`.
 3. Unknown.
 
-The report records which rule produced each classification.
+Categories C1 through C5 are surface vehicles and obstacles, kept separate from aircraft.
 
-## Tests
+## Development
 
 ```bash
-uv run pytest
+uv sync --extra enrich
+uv run pytest                    # backend
+
+cd web
+npm install
+npm test                         # Vitest
+npm run check                    # svelte-check and TypeScript
+npm run dev                      # http://127.0.0.1:5173, forwards /api to airspace serve on :8000
 ```
 
-The tests cover adapter edge cases, geometry, collector failure handling with a fake clock, state, trails and crossings, replay matching the live snapshot at the same moment, and the API against a mock provider.
+```
+src/airspace/      Python package: providers/, collector, state, storage, replay, API, exports, CLI
+web/src/           Svelte 5 dashboard: components/, lib/ (API client, geometry, theme, replay)
+tests/             pytest suite and a captured adsb.fi fixture
+docs/exports.md    Export formats
+PLANNING.md        Original plan, milestone decisions and implementation notes
+```
 
-`tests/fixtures/adsbfi_v3_la.json` is a real adsb.fi v3 response captured October 17, 2026, at the demo center. The `dst` and `dir` fields were removed and owner names redacted.
+Backend tests cover adapter edge cases, geometry, collector failure handling with a fake clock, state and trails, replay matching the live snapshot, exports and the API against a mock provider. Frontend tests cover formatting, filters, freshness, replay control and the app with a Mapbox mock. [PLANNING.md](PLANNING.md) has the design decisions and how things fit together.
 
 ## Data and terms
 
-Aircraft data comes from [adsb.fi](https://adsb.fi), whose open data is for personal, noncommercial use and requires attribution. Check the terms before any newsroom or commercial use.
+Aircraft data comes from [adsb.fi](https://adsb.fi), whose open data is for personal, noncommercial use and requires attribution, which the dashboard shows. Check the terms before any newsroom or commercial use. Coverage depends on volunteer receivers; aircraft can be missing, late or misidentified, and an empty map is not proof of an empty sky.
+
+## License
+
+[MIT](LICENSE)
