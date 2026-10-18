@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { altitude, cardinal, identity, miles } from '../lib/format';
+  import { altitude, cardinal, identity, miles, operatorTag } from '../lib/format';
   import type { Aircraft } from '../lib/types';
 
   interface Props {
@@ -28,7 +28,12 @@
         >
           <span class="kind {a.class}" aria-hidden="true"></span>
           <span class="name">
-            <strong>{identity(a)}</strong>
+            <span class="id">
+              <strong>{identity(a)}</strong>
+              {#if operatorTag(a)}
+                <span class="tag role-{a.role}" title={a.operator ?? undefined}>{operatorTag(a)}</span>
+              {/if}
+            </span>
             <span class="type">{a.description ?? a.aircraft_type ?? 'Type unknown'}</span>
           </span>
           <span class="alt">{altitude(a)}</span>
@@ -94,6 +99,23 @@
     font-family: var(--mono);
     font-weight: 500;
     letter-spacing: 0.02em;
+  }
+  .id {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .tag {
+    flex: none;
+    padding: 0 4px;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 14px;
+    text-transform: uppercase;
   }
   .name {
     grid-area: name;

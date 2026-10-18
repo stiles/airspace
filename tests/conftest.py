@@ -19,7 +19,8 @@ def config(tmp_path) -> Config:
         {
             "home": {"latitude": DEMO_LATITUDE, "longitude": DEMO_LONGITUDE},
             "storage": {"data_dir": str(tmp_path / "data")},
-            "enrich": {"hangarbay_db": None},
+            # Tests opt in to catalogs explicitly; never the repo's own
+            "enrich": {"hangarbay_db": None, "catalogs": []},
         }
     )
 

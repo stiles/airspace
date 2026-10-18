@@ -16,6 +16,7 @@ import typer
 
 from airspace import config as cfg
 from airspace import report as report_mod
+from airspace.catalog import Catalog, CatalogError
 from airspace.collector import Collector
 from airspace.enrich import HangarbayRegistry
 from airspace.lock import CollectorLock, CollectorLocked
@@ -45,6 +46,14 @@ def _load(config_file: Path | None) -> cfg.Config:
         raise typer.BadParameter(str(exc)) from None
     except ValueError as exc:
         typer.echo(f"Invalid configuration:\n{exc}", err=True)
+        raise typer.Exit(2) from None
+
+
+def _catalog(config: cfg.Config) -> Catalog:
+    try:
+        return Catalog.load(config.enrich.catalogs)
+    except CatalogError as exc:
+        typer.echo(str(exc), err=True)
         raise typer.Exit(2) from None
 
 
@@ -150,9 +159,10 @@ def report(
     except (LookupError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from None
+    catalog = _catalog(config)
     reg = HangarbayRegistry.open_optional(config.enrich.hangarbay_db) if registry else None
     try:
-        data = report_mod.build(store, session_id, config, reg)
+        data = report_mod.build(store, session_id, config, reg, catalog=catalog)
     finally:
         if reg:
             reg.close()
@@ -203,7 +213,9 @@ def serve(config_file: ConfigOption = None, port: PortOption = 8000) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     config = _load(config_file)
+    catalog = _catalog(config)
     typer.echo(f"Serving http://127.0.0.1:{port} (API docs at /api/docs). Data: adsb.fi (https://adsb.fi).")
+    typer.echo(f"Catalog: {len(catalog)} aircraft, {len(catalog.patterns)} owner patterns.")
     try:
         with CollectorLock(config.storage.data_dir):
             _serve(config, "live", port)
@@ -220,6 +232,7 @@ def replay(
 ) -> None:
     """Serve recorded sessions with live acquisition disabled."""
     config = _load(config_file)
+    _catalog(config)
     try:
         store = Store(config.storage.data_dir, read_only=True)
         session_id = store.resolve_session(session)
@@ -263,14 +276,19 @@ def export(
         "start": datetime.fromisoformat(start.replace("Z", "+00:00")) if start else None,
         "end": datetime.fromisoformat(end.replace("Z", "+00:00")) if end else None,
     }
-    cache = RegistryCache(HangarbayRegistry.open_optional(config.enrich.hangarbay_db))
+    try:
+        cache = RegistryCache.from_config(config)
+    except CatalogError as exc:
+        store.close()
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from None
     try:
         if format == "flighttracer":
             if not aircraft or len(aircraft) != 1:
                 raise typer.BadParameter("flighttracer export needs exactly one --aircraft")
             folder = output or Path(f"airspace-{aircraft[0].lower()}-session-{session_id}")
             try:
-                meta = export_mod.to_flighttracer(store, session_id, config, folder, aircraft[0], **window)
+                meta = export_mod.to_flighttracer(store, session_id, config, folder, aircraft[0], cache=cache, **window)
             except LookupError as exc:
                 typer.echo(str(exc), err=True)
                 raise typer.Exit(1) from None
@@ -285,10 +303,51 @@ def export(
             )
             count = len(body["features"])
     finally:
-        if cache.registry:
-            cache.registry.close()
+        cache.close()
         store.close()
     suffix = "json" if format == "json" else f"{geometry}.geojson"
     path = output or Path(f"airspace-session-{session_id}-{suffix}")
     path.write_text(json.dumps(body, indent=1))
     typer.echo(f"Wrote {count} {'observations' if format == 'json' else 'features'} to {path}")
+
+
+@app.command()
+def catalog(config_file: ConfigOption = None) -> None:
+    """Check the operator catalogs and compare them with the FAA registry when available."""
+    from collections import Counter
+
+    config = _load(config_file)
+    cat = _catalog(config)
+    typer.echo(f"{len(cat)} aircraft and {len(cat.patterns)} owner patterns from {len(cat.files)} files:")
+    for file in cat.files:
+        typer.echo(f"  {file}")
+    by_role = Counter(op.role for _, _, op in cat.rows)
+    typer.echo("Roles: " + ", ".join(f"{role} {n}" for role, n in by_role.most_common()))
+    typer.echo(f"Unconfirmed identifications (no checked date): {sum(1 for *_, op in cat.rows if not op.checked)}")
+
+    reg = HangarbayRegistry.open_optional(config.enrich.hangarbay_db)
+    if reg is None:
+        typer.echo("FAA registry not available; skipped the hex and registration check.")
+        return
+    try:
+        found = reg.lookup([h for h, _, _ in cat.rows if h])
+    finally:
+        reg.close()
+    problems = []
+    for hex_id, registration, _ in cat.rows:
+        if not hex_id:
+            continue
+        record = found.get(hex_id)
+        label = f"{registration or '?'} ({hex_id})"
+        if record is None:
+            problems.append(f"{label}: hex not in the FAA registry (foreign, military or a typo?)")
+        elif record.get("is_deregistered"):
+            problems.append(f"{label}: deregistered")
+        elif registration and f"N{record['n_number']}" != registration:
+            problems.append(f"{label}: the registry has this hex as N{record['n_number']}")
+    if problems:
+        typer.echo(f"{len(problems)} registry problems:")
+        for p in problems:
+            typer.echo(f"  {p}")
+        raise typer.Exit(1)
+    typer.echo("Every hex matches its registration in the FAA registry.")

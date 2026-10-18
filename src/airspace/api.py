@@ -20,7 +20,6 @@ from airspace.collector import Clock, Collector
 from airspace.config import Config
 from airspace import export as export_mod
 from airspace import procinfo
-from airspace.enrich import HangarbayRegistry
 from airspace.models import PollResult, from_iso, utcnow
 from airspace.providers import get_provider
 from airspace.providers.base import USER_AGENT
@@ -40,11 +39,10 @@ class LiveService:
         self.config = config
         self.transport = transport
         self.clock = clock
-        registry = HangarbayRegistry.open_optional(config.enrich.hangarbay_db)
-        self.cache = RegistryCache(registry)
+        self.cache = RegistryCache.from_config(config)
         # DuckDB connections are not safe for concurrent use; keep lookups on one thread
         self._lookup_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="registry")
-        self.state = StateBuilder(config, classifier=self.cache.classify, mode="live")
+        self.state = StateBuilder(config, identity=self.cache, mode="live")
         self.store: Store | None = None
         self.collector: Collector | None = None
         self.task: asyncio.Task | None = None
@@ -88,8 +86,7 @@ class LiveService:
         if self._pending:
             await asyncio.gather(*self._pending, return_exceptions=True)
         self._lookup_executor.shutdown(wait=True)
-        if self.cache.registry:
-            self.cache.registry.close()
+        self.cache.close()
         await self.client.aclose()
         self.store.end_session(self.session_id, self.end_reason or "stopped")
         self.store.close()
@@ -121,12 +118,11 @@ def create_app(
         """One registry cache for replay and export requests; lookups serialized (DuckDB isn't thread-safe)."""
 
         def __init__(self):
-            self.cache = RegistryCache(HangarbayRegistry.open_optional(config.enrich.hangarbay_db))
+            self.cache = RegistryCache.from_config(config)
             self.lock = threading.Lock()
 
         def close(self):
-            if self.cache.registry:
-                self.cache.registry.close()
+            self.cache.close()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -187,6 +183,7 @@ def create_app(
                 "max": max(ages) if ages else None,
             },
             "registry_lookups": service.cache.registry is not None,
+            "catalog_aircraft": len(service.cache.catalog) if service.cache.catalog else 0,
             "process": procinfo.memory().as_dict(),
         }
 

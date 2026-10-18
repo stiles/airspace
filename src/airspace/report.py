@@ -8,9 +8,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from airspace import classify as cls
+from airspace.catalog import Catalog, Operator
 from airspace.config import Config
 from airspace.geometry import METERS_PER_MILE, METERS_PER_NM, distance_m
 from airspace.models import from_iso
+from airspace.replay import RegistryCache
 from airspace.storage import Store
 
 NULLABLE_FIELDS = [
@@ -47,7 +49,9 @@ def _track_diff(a: float, b: float) -> float:
     return min(d, 360 - d)
 
 
-def build(store: Store, session_id: int, config: Config, registry: cls.Registry | None = None) -> dict:
+def build(
+    store: Store, session_id: int, config: Config, registry: cls.Registry | None = None, catalog: Catalog | None = None
+) -> dict:
     conn = store.conn
     session = dict(conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone())
     polls = [dict(r) for r in conn.execute("SELECT * FROM polls WHERE session_id = ? ORDER BY id", (session_id,))]
@@ -78,6 +82,9 @@ def build(store: Store, session_id: int, config: Config, registry: cls.Registry 
     classes = cls.classify_many(top_category, registry)
     for r in rows:
         r["class"] = classes[r["aircraft_id"]]
+    operators = _operators(rows, classes, registry, catalog)
+    for r in rows:
+        r["operator"] = operators.get(r["aircraft_id"])
 
     airborne_rows = [r for r in rows if r["class"].kind != cls.SURFACE]
     sleeps = _sleep_windows(polls)
@@ -87,6 +94,8 @@ def build(store: Store, session_id: int, config: Config, registry: cls.Registry 
         "requests": _requests(polls),
         "positions": _positions(airborne_rows, config),
         "aircraft": _aircraft(rows, airborne_rows, classes),
+        "operators": _operator_counts(airborne_rows),
+        "catalog": catalog is not None and len(catalog) > 0,
         "rotorcraft": _rotorcraft(airborne_rows, config, sleeps),
         "null_rates": {
             f: (sum(r[f] is None for r in airborne_rows) / len(airborne_rows) if airborne_rows else None)
@@ -191,6 +200,38 @@ def _aircraft(rows: list[dict], airborne_rows: list[dict], classes: dict[str, cl
     }
 
 
+def _operators(rows, classes, registry, catalog: Catalog | None) -> dict[str, Operator | None]:
+    """Catalog match per aircraft from its latest identifying fields and registry owner."""
+    if catalog is None:
+        return {}
+    cache = RegistryCache(registry, max_records=None, catalog=catalog)
+    latest: dict[str, dict] = defaultdict(dict)
+    for r in rows:
+        for key in ("registration", "callsign", "owner_operator"):
+            if r[key]:
+                latest[r["aircraft_id"]][key] = r[key]
+    ids = {r["aircraft_id"] for r in rows}
+    cache.resolve(cache.unresolved(ids))
+    return {
+        aid: cache.operator(
+            aid, kind=classes[aid].kind, registration=latest[aid].get("registration"),
+            callsign=latest[aid].get("callsign"), owner=latest[aid].get("owner_operator"),
+        )  # fmt: skip
+        for aid in ids
+    }
+
+
+def _operator_counts(airborne_rows: list[dict]) -> dict:
+    """Aircraft by role and by named operator (private owners aren't named)."""
+    seen: dict[str, Operator | None] = {}
+    for r in airborne_rows:
+        seen[r["aircraft_id"]] = r.get("operator")
+    by_role = Counter(op.role if op else "unidentified" for op in seen.values())
+    by_operator = Counter(op.name for op in seen.values() if op and op.name)
+    by_rule = Counter(op.rule for op in seen.values() if op)
+    return {"by_role": dict(by_role), "by_operator": dict(by_operator), "by_rule": dict(by_rule)}
+
+
 def _by_aircraft(rows: list[dict]) -> dict[str, list[dict]]:
     grouped: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
@@ -218,9 +259,11 @@ def _rotorcraft(rows: list[dict], config: Config, sleeps) -> list[dict]:
             continue
         intervals, spanning = _new_position_intervals(obs, sleeps)
         last = obs[-1]
+        op = last.get("operator")
         result.append(
             {
                 "aircraft_id": aid,
+                "operator": (op.short or op.name or op.role) if op else None,
                 "registration": last["registration"],
                 "callsign": last["callsign"],
                 "type": last["aircraft_description"] or last["aircraft_type"],
@@ -422,18 +465,31 @@ def render(report: dict, config: Config) -> str:
     ]
     lines += [f"- {k}: {v}" for k, v in sorted(ac["by_class"].items(), key=lambda kv: -kv[1])]
 
+    if report["catalog"]:
+        ops = report["operators"]
+        lines += ["", "## Operators", ""]
+        lines.append("- By role: " + ", ".join(f"{k} {v}" for k, v in sorted(ops["by_role"].items(), key=lambda kv: -kv[1])))
+        if ops["by_operator"]:
+            lines.append(
+                "- Named operators: "
+                + ", ".join(f"{k} {v}" for k, v in sorted(ops["by_operator"].items(), key=lambda kv: (-kv[1], kv[0])))
+            )
+        if ops["by_rule"]:
+            lines.append("- Matched by: " + ", ".join(f"{k} {v}" for k, v in sorted(ops["by_rule"].items(), key=lambda kv: -kv[1])))
+
     lines += ["", "## Rotorcraft", ""]
     if report["rotorcraft"]:
         lines += [
             f"Continuity is the {CONTINUITY_NOTE} ({config.freshness.trail_gap_s:g}s). "
             "Intervals spanning host sleep are excluded and counted under Sleep.",
             "",
-            "| ID | Registration | Callsign | Type | Rule | Positions | Seen (UTC) | Max interval | Continuity | Sleep | Closest | Visible |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| ID | Registration | Callsign | Operator | Type | Rule | Positions | Seen (UTC) | Max interval | Continuity | Sleep | Closest | Visible |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for r in report["rotorcraft"]:
             lines.append(
-                f"| {r['aircraft_id']} | {r['registration'] or ''} | {r['callsign'] or ''} | {r['type'] or ''} "
+                f"| {r['aircraft_id']} | {r['registration'] or ''} | {r['callsign'] or ''} | {r['operator'] or ''} "
+                f"| {r['type'] or ''} "
                 f"| {r['rule']} | {r['new_positions']} | {_fmt_time(r['first_seen'])}–{_fmt_time(r['last_seen'])} "
                 f"| {_fmt(r['max_interval_s'], '.0f', 's')} | {_fmt(r['continuity'], '.0%')} | {r['sleep_spanning']} "
                 f"| {r['min_distance_mi']:.1f} mi | {'yes' if r['visible'] else 'no'} |"

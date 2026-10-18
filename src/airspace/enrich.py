@@ -10,9 +10,14 @@ from pathlib import Path
 
 QUERY = """
 SELECT lower(a.mode_s_code_hex) AS aircraft_id, a.n_number, m.maker, m.model, m.type AS faa_type,
-       a.is_deregistered
+       a.is_deregistered, o.owner_type, o.owner_name
 FROM aircraft_decoded a
 LEFT JOIN aircraft_make_model m USING (mfr_mdl_code)
+-- Co-owners share a registration; owner_type 1 (individual) sorts first, so any individual shows
+LEFT JOIN (
+    SELECT n_number, min(owner_type) AS owner_type, string_agg(owner_name_std, '; ') AS owner_name
+    FROM owners GROUP BY n_number
+) o USING (n_number)
 WHERE lower(a.mode_s_code_hex) IN (SELECT unnest(?))
 ORDER BY a.is_deregistered  -- prefer active registrations
 """

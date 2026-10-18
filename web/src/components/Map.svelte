@@ -325,7 +325,7 @@
         role="tooltip"
         data-testid="map-tooltip"
       >
-        <strong>{tip.title}</strong>
+        <strong>{tip.title}{#if tip.tag}<span class="tag role-{tipAircraft?.role}">{tip.tag}</span>{/if}</strong>
         <span class="sub">{tip.subtitle}</span>
         {#each tip.lines as line (line)}
           <span>{line}</span>
@@ -399,11 +399,18 @@
     font-weight: 500;
     letter-spacing: 0.02em;
   }
+  .tooltip .tag {
+    margin-left: 6px;
+    padding: 0 4px;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    font-family: Inter, system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
   .tooltip .sub {
-    overflow: hidden;
     color: var(--muted-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .tooltip .note {
     color: var(--amber);

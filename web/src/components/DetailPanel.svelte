@@ -9,6 +9,9 @@
     identity,
     knots,
     miles,
+    operatorTag,
+    roleLabel,
+    roleRule,
     positionSource,
     seconds,
     UNKNOWN,
@@ -38,7 +41,10 @@
   <section class="detail" aria-label="Selected aircraft" data-testid="detail">
     <header>
       <div>
-        <h2>{identity(a)}</h2>
+        <h2>
+          {identity(a)}
+          {#if operatorTag(a)}<span class="tag role-{a.role}">{operatorTag(a)}</span>{/if}
+        </h2>
         <p class="sub">{a.description ?? a.aircraft_type ?? 'Type unknown'}</p>
       </div>
       <button type="button" class="close" onclick={onclose} aria-label="Close details">×</button>
@@ -50,6 +56,27 @@
       <p class="note alert">Emergency status reported: {a.emergency}</p>
     {/if}
     <dl>
+      <dt>Operator</dt>
+      <dd data-testid="operator">
+        {#if a.role === 'private'}
+          Private owner <span class="muted">(name withheld)</span>
+        {:else if a.role}
+          {a.operator ?? roleLabel(a.role)} <span class="muted">({roleLabel(a.role)})</span>
+        {:else}
+          {UNKNOWN} <span class="muted">(not in the catalog)</span>
+        {/if}
+      </dd>
+      {#if a.role && a.role_rule}
+        <dt>Identified by</dt>
+        <dd>
+          {roleRule(a.role_rule)}{#if a.role_source && a.role_rule !== 'registry_owner_type'}<span class="muted">: {a.role_source}</span>{/if}
+          {#if a.role_rule.startsWith('catalog')}
+            <span class={a.role_checked ? 'muted' : 'unconfirmed'}>
+              {a.role_checked ? `(confirmed ${a.role_checked})` : '(inferred, unconfirmed)'}
+            </span>
+          {/if}
+        </dd>
+      {/if}
       <dt>Registration</dt>
       <dd>{a.registration ?? UNKNOWN}</dd>
       <dt>Callsign</dt>
@@ -115,6 +142,20 @@
     font-family: var(--mono);
     font-size: 17px;
     font-weight: 500;
+  }
+  h2 .tag {
+    margin-left: 6px;
+    padding: 0 5px;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    font-family: Inter, system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    vertical-align: 2px;
+  }
+  .unconfirmed {
+    color: var(--amber);
   }
   .sub {
     margin: 2px 0 0;

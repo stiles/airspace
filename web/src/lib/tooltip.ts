@@ -1,10 +1,12 @@
 // Hover card text for an aircraft on the map. Short lines; the detail panel has the rest.
 
-import { altitude, cardinal, classLabel, identity, knots, miles, seconds } from './format';
+import { altitude, cardinal, classLabel, identity, knots, miles, operatorTag, seconds } from './format';
 import type { Aircraft } from './types';
 
 export interface Tooltip {
   title: string;
+  /** Operator short name or role, for a colored tag */
+  tag: string | null;
   subtitle: string;
   lines: string[];
   note: string | null;
@@ -20,7 +22,10 @@ export function tooltipFor(a: Aircraft): Tooltip {
   const speed = a.ground_speed_kt === null ? null : knots(a.ground_speed_kt);
   return {
     title: identity(a),
-    subtitle: a.description ?? a.aircraft_type ?? classLabel(a.class),
+    tag: operatorTag(a),
+    subtitle: [a.role && a.role !== 'private' ? a.operator : null, a.description ?? a.aircraft_type ?? classLabel(a.class)]
+      .filter(Boolean)
+      .join(' · '),
     lines: [speed ? `${alt} · ${speed}` : alt, `${miles(a.distance_m)} ${cardinal(a.bearing_deg)} of home`],
     note:
       a.freshness === 'fading'

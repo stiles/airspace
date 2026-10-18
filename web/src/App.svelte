@@ -256,6 +256,15 @@
     --alert: #ff5a5a;
     --alert-bg: #5c1a1a;
     --alert-text: #f3d0d0;
+    /* Operator roles: tags in the list, detail panel and hover cards */
+    --role-police: #8ab4ff;
+    --role-fire: #ff7a45;
+    --role-medical: #ff8fc7;
+    --role-news: #c9a2ff;
+    --role-utility: #d6e685;
+    --role-military: #b4bcb8;
+    --role-other: #8fd3c8;
+    --role-private: #6f8f7f;
     --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     color-scheme: dark;
   }
@@ -268,6 +277,31 @@
   }
   :global(#app) {
     height: 100%;
+  }
+  :global(.role-police) {
+    color: var(--role-police);
+  }
+  :global(.role-fire) {
+    color: var(--role-fire);
+  }
+  :global(.role-medical) {
+    color: var(--role-medical);
+  }
+  :global(.role-news) {
+    color: var(--role-news);
+  }
+  :global(.role-utility) {
+    color: var(--role-utility);
+  }
+  :global(.role-military) {
+    color: var(--role-military);
+  }
+  :global(.role-tour),
+  :global(.role-training) {
+    color: var(--role-other);
+  }
+  :global(.role-private) {
+    color: var(--role-private);
   }
   :global(.visually-hidden) {
     position: absolute;

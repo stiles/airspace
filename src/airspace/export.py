@@ -45,11 +45,17 @@ FIELDS = {
     "aircraft_description": "Type description from the provider's aircraft database.",
     "category": "ADS-B emitter category (A7 = rotorcraft; C1-C5 = surface vehicles and obstacles).",
     "position_source": "Provider position source, e.g. adsb_icao, adsr_icao, mlat, tisb_trackfile.",
-    "owner_operator": "Owner or operator from the provider's aircraft database.",
+    "owner_operator": "Owner or operator from the provider's aircraft database. Null when the FAA registry lists "
+    "individuals as owners (role 'private').",
     "squawk": "Transponder code.",
     "emergency": "Reported emergency status.",
     "classification": "rotorcraft, gyroplane, surface, aircraft or unknown.",
     "classification_rule": "Source of the classification: adsb_category, faa_registry or none.",
+    "operator": "Operator from the Airspace catalog (e.g. 'LAPD Air Support Division'). Null when unknown or private.",
+    "operator_short": "Short operator name for labels (e.g. 'LAPD').",
+    "role": "police, fire, medical, news, military, tour, utility, training or private; null when unknown.",
+    "role_rule": "How the operator was identified: catalog_hex, catalog_registration, catalog_callsign, "
+    "owner_pattern (registered owner's name) or registry_owner_type (private).",
 }
 
 EXPORT_COLUMNS = [c for c in OBSERVATION_COLUMNS if c != "provider"]
@@ -87,9 +93,30 @@ def _classify(rows: list[dict], cache: RegistryCache) -> None:
         if r["category"]:
             categories[r["aircraft_id"]] = r["category"]
     cache.resolve(cache.unresolved(categories))
+    # Identify each aircraft once, from its latest identifying fields
+    latest: dict[str, dict] = {}
+    for r in rows:
+        prev = latest.setdefault(r["aircraft_id"], {})
+        for key in ("registration", "callsign", "owner_operator"):
+            if r[key]:
+                prev[key] = r[key]
+    operators = {}
+    for aid, fields in latest.items():
+        kind = cache.classify(aid, categories[aid]).kind
+        operators[aid] = cache.operator(
+            aid, kind=kind, registration=fields.get("registration"), callsign=fields.get("callsign"),
+            owner=fields.get("owner_operator"),
+        )  # fmt: skip
     for r in rows:
         c = cache.classify(r["aircraft_id"], categories[r["aircraft_id"]])
         r["classification"], r["classification_rule"] = c.kind, c.rule
+        op = operators[r["aircraft_id"]]
+        r["operator"] = op.name if op else None
+        r["operator_short"] = op.short if op else None
+        r["role"] = op.role if op else None
+        r["role_rule"] = op.rule if op else None
+        if op and op.private:
+            r["owner_operator"] = None
 
 
 def _coverage_gaps(store: Store, session_id: int, start: datetime | None, end: datetime | None) -> list[dict]:
@@ -209,6 +236,10 @@ def _tracks(rows: list[dict], trail_gap_s: float) -> list[dict]:
                         "aircraft_description": last["aircraft_description"],
                         "classification": last["classification"],
                         "classification_rule": last["classification_rule"],
+                        "operator": last["operator"],
+                        "operator_short": last["operator_short"],
+                        "role": last["role"],
+                        "role_rule": last["role_rule"],
                         "start": segment[0]["position_at"],
                         "end": last["position_at"],
                         "points": len(segment),
@@ -273,7 +304,15 @@ FLIGHTTRACER_COLUMNS = [
 
 
 def to_flighttracer(
-    store: Store, session_id: int, config: Config, folder: Path, aircraft_id: str, *, start=None, end=None
+    store: Store,
+    session_id: int,
+    config: Config,
+    folder: Path,
+    aircraft_id: str,
+    *,
+    start=None,
+    end=None,
+    cache: RegistryCache | None = None,
 ) -> dict:
     """Write a FlightTracer run folder for one aircraft; `flight-tracer render <folder>` draws it.
 
@@ -288,6 +327,9 @@ def to_flighttracer(
     ]
     if not rows:
         raise LookupError(f"no airborne positions for {aircraft_id} in session {session_id}")
+    # Hides private owners' names; without a cache, owner_op stays as the provider sent it
+    if cache is not None:
+        _classify(rows, cache)
     rows.sort(key=lambda r: r["position_at"])
     callsign = next((r["callsign"] for r in reversed(rows) if r["callsign"]), None) or "UNKNOWN"
     fade_s = config.freshness.fade_s

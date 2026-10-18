@@ -1,6 +1,6 @@
 // Display formatting. Unknown stays unknown; zero is a real value.
 
-import type { Aircraft, AircraftClass } from './types';
+import type { Aircraft, AircraftClass, Role } from './types';
 
 export const METERS_PER_MILE = 1609.344;
 export const UNKNOWN = 'Unknown';
@@ -95,4 +95,38 @@ const SOURCE_LABELS: Record<string, string> = {
 
 export function positionSource(value: string | null): string {
   return value === null ? UNKNOWN : (SOURCE_LABELS[value] ?? value);
+}
+
+const ROLE_LABELS: Record<Role, string> = {
+  police: 'Police',
+  fire: 'Fire',
+  medical: 'Medical',
+  news: 'News',
+  military: 'Military',
+  tour: 'Tour',
+  utility: 'Utility',
+  training: 'Training',
+  private: 'Private',
+};
+
+export function roleLabel(role: Role): string {
+  return ROLE_LABELS[role] ?? role;
+}
+
+/** Short tag for lists and labels: the operator's short name, else its role. */
+export function operatorTag(a: Pick<Aircraft, 'operator_short' | 'operator' | 'role'>): string | null {
+  if (!a.role) return null;
+  return a.operator_short ?? (a.role === 'private' ? 'Private' : roleLabel(a.role));
+}
+
+const ROLE_RULE_LABELS: Record<string, string> = {
+  catalog_hex: 'catalog, by ICAO address',
+  catalog_registration: 'catalog, by registration',
+  catalog_callsign: 'catalog, by callsign',
+  owner_pattern: "registered owner's name",
+  registry_owner_type: 'FAA registry lists individuals as owners',
+};
+
+export function roleRule(rule: string): string {
+  return ROLE_RULE_LABELS[rule] ?? rule;
 }

@@ -9,6 +9,7 @@ What's flying near home right now? Airspace is a local aircraft tracker. It poll
 - **Live map:** aircraft within a configurable radius, rotated by ground track, with fading trails, altitude labels, mile rings, a legend and hover cards. Helicopters are amber.
 - **Honest freshness:** positions age on screen between updates and fade, then disappear, when they go stale. Any outage turns the header red and grays out the map, so it never reads as an empty sky.
 - **Helicopter classification:** ADS-B emitter category A7, then the FAA registry through [hangarbay](https://github.com/stiles/hangarbay) when it's installed.
+- **Operators and roles:** a catalog identifies police, fire, medical, news and utility aircraft (LAPD, LASD, LA County Fire, CHP and more for Los Angeles), with the source for each identification. Aircraft registered to individuals show as private, without a name.
 - **Recording and replay:** every poll is stored in SQLite. Replay any session on a timeline that shows failed polls, laptop sleep and helicopter activity.
 - **Exports:** JSON or GeoJSON (tracks or points) with provenance, and run folders for [FlightTracer](https://github.com/stiles/flight-tracer).
 - **Coverage reports:** request success, position age, helicopter continuity, gaps and storage for any recorded session.
@@ -48,6 +49,7 @@ uv run airspace serve                   # collector + dashboard at http://127.0.
 | `airspace sessions` | List recorded sessions |
 | `airspace replay --session latest` | Serve recorded data only, with no provider requests |
 | `airspace export --format geojson` | Export a session (see below) |
+| `airspace catalog` | Check the operator catalogs against the FAA registry |
 
 Every command takes `--config` for a config file other than `airspace.toml`, and `--help` lists the rest. Only one collector can run against a data directory at a time, so `serve` refuses to start while `collect` is running, and vice versa.
 
@@ -108,7 +110,7 @@ Exports include source, terms and timestamp provenance and never include the hom
 | `[collector]` | `poll_interval_s` (10), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (false; keep gzipped raw responses) |
 | `[freshness]` | `fade_s` (20), `hide_s` (60), `trail_gap_s` (30), `trail_duration_s` (300) |
 | `[storage]` | `data_dir` (`data`), `retention_days` (7; 0 keeps everything) |
-| `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off |
+| `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off. `catalogs`: operator catalog files or folders (`catalogs`) |
 
 The collector prunes recordings older than `retention_days` when it starts and every hour after, removing sessions it empties along with their raw files. SQLite grows about 3–4 MB/hour, so a week takes roughly 600 MB; `store_raw = true` adds about 1 MB/hour. Deleted space is reused rather than returned to the disk; run `sqlite3 data/airspace.sqlite VACUUM` with the collector stopped to shrink the file.
 
@@ -123,6 +125,27 @@ The classifier tries these in order and records which rule decided:
 3. Unknown.
 
 Categories C1 through C5 are surface vehicles and obstacles, kept separate from aircraft.
+
+## Operators and roles
+
+CSV files in `catalogs/` say who operates an aircraft and in what role: `police`, `fire`, `medical`, `news`, `military`, `tour`, `utility`, `training` or `private`. Matching tries, in order:
+
+1. ICAO hex, then registration, from an aircraft file such as `catalogs/los-angeles.csv`.
+2. Callsign prefix (e.g. `LAC` for LA County Fire), for helicopters only, since a three-letter prefix can collide with an airline code.
+3. The registered owner's name (from the provider or hangarbay) against the patterns in `catalogs/operators.csv`, e.g. `CALIFORNIA HIGHWAY PATROL`, or any owner name with `POLICE` or `SHERIFF`.
+4. Private, when hangarbay lists individuals as owners. Their names are hidden on the dashboard and in exports.
+
+Everything else is unidentified; nothing is guessed from aircraft type or flight pattern. Each aircraft row needs a `source`, and `checked` holds the date an identification was confirmed. The dashboard marks rows without it as inferred. Run `airspace catalog` after editing to validate the files and compare each hex with its FAA registration.
+
+| Column | Aircraft files | |
+| --- | --- | --- |
+| `registration`, `icao_hex` | At least one | Hex is the six-digit ICAO address in lowercase |
+| `operator`, `operator_short` | Operator required (except `private`) | Short name is for labels and tags, e.g. `LAPD` |
+| `role` | Required | One of the roles above |
+| `callsign_prefix` | Optional | Two to four letters |
+| `type_note`, `source`, `checked` | Source required | |
+
+Pattern files have `pattern` (a case-insensitive regular expression), `operator`, `operator_short`, `role` and `source`. A pattern without an operator uses the owner's own name.
 
 ## Development
 

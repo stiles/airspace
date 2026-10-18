@@ -2,7 +2,7 @@
 
 The original technical plan (prepared October 17, 2026, as SPEC.md), with the decisions made while building each milestone and notes on how the pieces work. The [README](README.md) covers installing and using the tool.
 
-**Status:** milestones 1–4 are built. Milestone 5's soak test passed, and retention, memory tracking and a bounded registry cache were added for continuous operation (see [5. Decide on continuous operation](#5-decide-on-continuous-operation)). Next: the [roadmap](#roadmap), starting with an operator and role catalog for helicopters.
+**Status:** milestones 1–4 are built. Milestone 5's soak test passed, and retention, memory tracking and a bounded registry cache were added for continuous operation (see [5. Decide on continuous operation](#5-decide-on-continuous-operation)). On the [roadmap](#roadmap), milestone 6 (operator and role catalog) is built; next is behavior detection.
 
 ## Objective
 
@@ -291,6 +291,15 @@ Planned October 18, 2026, after milestone 5. Commercial traffic is well served e
 - Only organizations go in the catalog. Privately owned aircraft registered to individuals stay "private," with no owner name on the map or in exports.
 - Seed it for LA: LAPD, LASD, LAFD, LA County Fire, CHP, Cal Fire, the news helicopters, medevac operators, and the CL-415 Super Scoopers leased each fire season. Use the recordings from sessions 1–4 to find who actually flies over the area.
 - Shown in the list, the detail panel, hover cards and the map. Role colors stay within the radar palette, with amber kept for helicopters.
+
+Built October 18, 2026. Decisions made during implementation:
+
+- `catalogs/` holds aircraft files and owner-pattern files, told apart by header; `enrich.catalogs` lists files or folders. All files load everywhere: a tail number's operator is a fact wherever the aircraft flies.
+- The LA catalog started from Matt's registry extract of 52 public-agency aircraft plus two from the recordings (CHP N984HP, SCE N816CE). The registry often names only "County of Los Angeles" or "City of Los Angeles"; those rows were assigned by base and tail-number pattern (Long Beach → LASD, Pacoima → county fire, FD suffix in Van Nuys → LAFD, WP suffix → DWP, LA address → LAPD) and carry no `checked` date. The 1963 Bell 47 owned by the city was left out until its role is known. News helicopters (N925TV, N358TV, N828AP and others) wait on confirmation of which station each flies for.
+- Callsign prefixes match only helicopters, and only as letters followed by digits.
+- Private: hangarbay owner type 1 (individual) or 4 (co-owned). The registry lookup now returns owner type and name; the provider's owner field is withheld from the dashboard, detail endpoint and exports for those aircraft. Without hangarbay, the provider's owner field passes through as before.
+- `airspace catalog` validates the files and checks every hex against its FAA registration. `serve`, `replay` and `report` refuse to start on a catalog error, with file and line.
+- On session 4, the catalog identified 9 helicopters (LAPD ×5, LASD ×2, CHP, LA County Fire) and 26 privately owned aircraft. LAPD's N230LA passed 0.2 mi from home.
 
 **Milestone 7: behavior detection.** Computed from recorded positions by a function shared by live state, replay and exports, like the trail-break rule.
 

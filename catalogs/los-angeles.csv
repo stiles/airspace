@@ -1,55 +1,54 @@
-registration,icao_hex,operator,role,callsign_prefix,type_note,source,checked
-N120LA,a054ad,LA County Fire Air Operations,fire,,412EP,FAA registry owner,2026-10-18
-N14LA,a0a152,LA County Fire Air Operations,fire,,412EP,FAA registry owner is the county; based in Pacoima with the county fire fleet,
-N15LA,a0c8d1,LA County Fire Air Operations,fire,,S-70A; Firehawk,FAA registry owner is the county; based in Pacoima with the county fire fleet,
-N160LA,a0f2a9,LA County Fire Air Operations,fire,,S-70A; Firehawk,FAA registry owner,2026-10-18
-N18LA,a13f4e,LA County Fire Air Operations,fire,,412,FAA registry owner,2026-10-18
-N190LA,a16926,LA County Fire Air Operations,fire,LAC,S-70A; Firehawk,FAA registry owner; callsign LAC19 in session 4,2026-10-18
-N821LA,ab358d,LA County Fire Air Operations,fire,,S-70I; Firehawk,FAA registry owner,2026-10-18
-N304FD,a32eaf,LAFD Air Operations,fire,,AW139,"FAA registry owner is the city; FD suffix, based in Van Nuys",
-N305FD,a33266,LAFD Air Operations,fire,,AW139,"FAA registry owner is the city; FD suffix, based in Van Nuys",
-N306FD,a3361d,LAFD Air Operations,fire,,505,"FAA registry owner is the city; FD suffix, based in Van Nuys",
-N307FD,a339d4,LAFD Air Operations,fire,,505,"FAA registry owner is the city; FD suffix, based in Van Nuys",
-N984HP,adbabd,"California Highway Patrol, Office of Air Operations",police,CHP,AS350,FAA registry owner; callsign CHP58 in session 4,2026-10-18
-N213PF,a1c5f2,LAPD Air Support Division,police,,AS350B3,FAA registry owner,2026-10-18
-N21844,a1da3b,LAPD Air Support Division,police,,412EP,FAA registry owner,2026-10-18
-N221LA,a1e5b3,LAPD Air Support Division,police,,AS350B3,FAA registry owner,2026-10-18
-N223LA,a1ed21,LAPD Air Support Division,police,,AS350B3,FAA registry owner,2026-10-18
-N224LA,a1f0d8,LAPD Air Support Division,police,,AS350B3,FAA registry owner,2026-10-18
-N225LA,a1f48f,LAPD Air Support Division,police,,AS350B3,FAA registry owner,2026-10-18
-N226LA,a1f846,LAPD Air Support Division,police,,AS350B3,FAA registry owner,2026-10-18
-N228LA,a1ffb4,LAPD Air Support Division,police,,AS 350 B2,FAA registry owner is the city; LAPD tail-number series and address,
-N229LA,a2036b,LAPD Air Support Division,police,,AS 350 B2,FAA registry owner is the city; LAPD tail-number series and address,
-N230LA,a2097b,LAPD Air Support Division,police,,AS350B3,FAA registry owner,2026-10-18
-N232LA,a210e9,LAPD Air Support Division,police,,AS350B3,FAA registry owner is the city; LAPD tail-number series and address,
-N233LA,a214a0,LAPD Air Support Division,police,,AS350B3,FAA registry owner is the city; LAPD tail-number series and address,
-N267LA,a299f9,LAPD Air Support Division,police,,AS350B3,FAA registry owner,2026-10-18
-N472LA,a5c983,LAPD Air Support Division,police,,AS350B3,FAA registry owner,2026-10-18
-N665PD,a8c815,LAPD Air Support Division,police,,AS 350 B2,FAA registry owner,2026-10-18
-N668PD,a8d33a,LAPD Air Support Division,police,,AS350B2,FAA registry owner,2026-10-18
-N851EM,abab7f,LAPD Air Support Division,police,,C-12C; fixed-wing,FAA registry owner,2026-10-18
-N913WB,aca3c6,LAPD Air Support Division,police,,AS 350 B2,FAA registry owner,2026-10-18
-N950JE,ad3574,LASD Aero Bureau,police,,AS332L1; Super Puma; search and rescue,FAA registry owner,2026-10-18
-N950LA,ad35a2,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N951LA,ad3959,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N951LB,ad395a,LASD Aero Bureau,police,,AS332L1; Super Puma; search and rescue,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N952JH,ad3ce5,LASD Aero Bureau,police,,AS332L1; Super Puma; search and rescue,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N953LA,ad40c7,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N954LA,ad447e,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N955LA,ad4835,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N956LA,ad4bec,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N957LA,ad4fa3,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N958LA,ad535a,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N959LA,ad5711,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N960LA,ad5d21,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N961LA,ad60d8,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N961SD,ad6171,LASD Aero Bureau,police,,AS 350 B2,FAA registry owner,2026-10-18
-N962LA,ad648f,LASD Aero Bureau,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N963SD,ad68df,LASD Aero Bureau,police,,AS 350 B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N966SD,ad7404,LASD Aero Bureau,police,,AS 350 B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
-N73985,a9f008,City of Los Angeles,unknown,,47G-3B-1; 1963 Bell 47; likely a heritage aircraft,FAA registry owner; role not established,
-N703WP,a961b5,Los Angeles Department of Water and Power,utility,,AS350B3,FAA registry owner is the city; WP suffix matches DWP's 705WP and 706WP,
-N704WP,a9656c,Los Angeles Department of Water and Power,utility,,AS350B3,FAA registry owner is the city; WP suffix matches DWP's 705WP and 706WP,
-N705WP,a96923,Los Angeles Department of Water and Power,utility,,429,FAA registry owner,2026-10-18
-N706WP,a96cda,Los Angeles Department of Water and Power,utility,,429,FAA registry owner,2026-10-18
-N816CE,ab1fdd,Southern California Edison,utility,,AS350,FAA registry owner,2026-10-18
+registration,icao_hex,operator,operator_short,role,callsign_prefix,type_note,source,checked
+N120LA,a054ad,LA County Fire Air Operations,LACoFD,fire,,412EP,FAA registry owner,2026-10-18
+N14LA,a0a152,LA County Fire Air Operations,LACoFD,fire,,412EP,FAA registry owner is the county; based in Pacoima with the county fire fleet,
+N15LA,a0c8d1,LA County Fire Air Operations,LACoFD,fire,,S-70A; Firehawk,FAA registry owner is the county; based in Pacoima with the county fire fleet,
+N160LA,a0f2a9,LA County Fire Air Operations,LACoFD,fire,,S-70A; Firehawk,FAA registry owner,2026-10-18
+N18LA,a13f4e,LA County Fire Air Operations,LACoFD,fire,,412,FAA registry owner,2026-10-18
+N190LA,a16926,LA County Fire Air Operations,LACoFD,fire,LAC,S-70A; Firehawk,FAA registry owner; callsign LAC19 in session 4,2026-10-18
+N821LA,ab358d,LA County Fire Air Operations,LACoFD,fire,,S-70I; Firehawk,FAA registry owner,2026-10-18
+N304FD,a32eaf,LAFD Air Operations,LAFD,fire,,AW139,"FAA registry owner is the city; FD suffix, based in Van Nuys",
+N305FD,a33266,LAFD Air Operations,LAFD,fire,,AW139,"FAA registry owner is the city; FD suffix, based in Van Nuys",
+N306FD,a3361d,LAFD Air Operations,LAFD,fire,,505,"FAA registry owner is the city; FD suffix, based in Van Nuys",
+N307FD,a339d4,LAFD Air Operations,LAFD,fire,,505,"FAA registry owner is the city; FD suffix, based in Van Nuys",
+N984HP,adbabd,"California Highway Patrol, Office of Air Operations",CHP,police,CHP,AS350,FAA registry owner; callsign CHP58 in session 4,2026-10-18
+N213PF,a1c5f2,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner,2026-10-18
+N21844,a1da3b,LAPD Air Support Division,LAPD,police,,412EP,FAA registry owner,2026-10-18
+N221LA,a1e5b3,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner,2026-10-18
+N223LA,a1ed21,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner,2026-10-18
+N224LA,a1f0d8,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner,2026-10-18
+N225LA,a1f48f,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner,2026-10-18
+N226LA,a1f846,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner,2026-10-18
+N228LA,a1ffb4,LAPD Air Support Division,LAPD,police,,AS 350 B2,FAA registry owner is the city; LAPD tail-number series and address,
+N229LA,a2036b,LAPD Air Support Division,LAPD,police,,AS 350 B2,FAA registry owner is the city; LAPD tail-number series and address,
+N230LA,a2097b,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner,2026-10-18
+N232LA,a210e9,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner is the city; LAPD tail-number series and address,
+N233LA,a214a0,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner is the city; LAPD tail-number series and address,
+N267LA,a299f9,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner,2026-10-18
+N472LA,a5c983,LAPD Air Support Division,LAPD,police,,AS350B3,FAA registry owner,2026-10-18
+N665PD,a8c815,LAPD Air Support Division,LAPD,police,,AS 350 B2,FAA registry owner,2026-10-18
+N668PD,a8d33a,LAPD Air Support Division,LAPD,police,,AS350B2,FAA registry owner,2026-10-18
+N851EM,abab7f,LAPD Air Support Division,LAPD,police,,C-12C; fixed-wing,FAA registry owner,2026-10-18
+N913WB,aca3c6,LAPD Air Support Division,LAPD,police,,AS 350 B2,FAA registry owner,2026-10-18
+N950JE,ad3574,LASD Aero Bureau,LASD,police,,AS332L1; Super Puma; search and rescue,FAA registry owner,2026-10-18
+N950LA,ad35a2,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N951LA,ad3959,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N951LB,ad395a,LASD Aero Bureau,LASD,police,,AS332L1; Super Puma; search and rescue,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N952JH,ad3ce5,LASD Aero Bureau,LASD,police,,AS332L1; Super Puma; search and rescue,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N953LA,ad40c7,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N954LA,ad447e,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N955LA,ad4835,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N956LA,ad4bec,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N957LA,ad4fa3,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N958LA,ad535a,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N959LA,ad5711,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N960LA,ad5d21,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N961LA,ad60d8,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N961SD,ad6171,LASD Aero Bureau,LASD,police,,AS 350 B2,FAA registry owner,2026-10-18
+N962LA,ad648f,LASD Aero Bureau,LASD,police,,AS350B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N963SD,ad68df,LASD Aero Bureau,LASD,police,,AS 350 B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N966SD,ad7404,LASD Aero Bureau,LASD,police,,AS 350 B2,FAA registry owner is the county; based in Long Beach with the sheriff's fleet,
+N703WP,a961b5,Los Angeles Department of Water and Power,LADWP,utility,,AS350B3,FAA registry owner is the city; WP suffix matches DWP's 705WP and 706WP,
+N704WP,a9656c,Los Angeles Department of Water and Power,LADWP,utility,,AS350B3,FAA registry owner is the city; WP suffix matches DWP's 705WP and 706WP,
+N705WP,a96923,Los Angeles Department of Water and Power,LADWP,utility,,429,FAA registry owner,2026-10-18
+N706WP,a96cda,Los Angeles Department of Water and Power,LADWP,utility,,429,FAA registry owner,2026-10-18
+N816CE,ab1fdd,Southern California Edison,SCE,utility,,AS350,FAA registry owner,2026-10-18

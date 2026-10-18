@@ -82,7 +82,9 @@ export function aircraftCollection(aircraft: Aircraft[], selectedId: string | nu
           kind: a.class,
           freshness: a.freshness,
           selected: a.id === selectedId,
-          label: alt ? `${identity(a)}\n${alt}` : identity(a),
+          label: [identity(a), [alt, a.role && a.role !== 'private' ? a.operator_short : null].filter(Boolean).join(' ')]
+            .filter(Boolean)
+            .join('\n'),
         },
       };
     }),

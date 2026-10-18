@@ -30,7 +30,7 @@ Every export carries a `metadata` object. In GeoJSON it's a foreign member, whic
 
 ## JSON (`--format json`)
 
-`{"metadata": ..., "fields": ..., "observations": [...]}`. Each observation has the normalized fields below, plus `classification` and `classification_rule`. `fields` holds these definitions in machine-readable form.
+`{"metadata": ..., "fields": ..., "observations": [...]}`. Each observation has the normalized fields below, plus `classification`, `classification_rule` and the operator fields. `fields` holds these definitions in machine-readable form.
 
 | Field | Meaning |
 | --- | --- |
@@ -47,14 +47,16 @@ Every export carries a `metadata` object. In GeoJSON it's a foreign member, whic
 | `ground_speed_kt`, `track_deg`, `vertical_rate_fpm` | Movement; track is not necessarily heading |
 | `callsign`, `registration`, `aircraft_type`, `aircraft_description`, `category` | Identification; null when unknown |
 | `position_source` | `adsb_icao`, `adsr_icao`, `mlat`, `tisb_trackfile` and so on |
-| `owner_operator`, `squawk`, `emergency` | As reported |
+| `owner_operator` | As reported, except null when the FAA registry lists individuals as owners (role `private`) |
+| `squawk`, `emergency` | As reported |
 | `classification`, `classification_rule` | `rotorcraft`, `gyroplane`, `surface`, `aircraft` or `unknown`, and the rule that produced it (`adsb_category`, `faa_registry`, `none`) |
+| `operator`, `operator_short`, `role`, `role_rule` | From the operator catalog: e.g. `LAPD Air Support Division`, `LAPD`, `police`, and how it matched (`catalog_hex`, `catalog_registration`, `catalog_callsign`, `owner_pattern`, `registry_owner_type`). Null when unidentified; `operator` is null for private owners |
 
 ## GeoJSON tracks (default)
 
 One feature per continuous track segment per aircraft, built from new positions only, ordered by `position_at`. A segment ends at a gap longer than the trail gap threshold (30 seconds by default) or an implied speed above 800 knots. Gaps are never joined into one line. A segment with a single position is a Point.
 
-Properties: `aircraft_id`, `segment`, `registration`, `callsigns`, `aircraft_type`, `aircraft_description`, `classification`, `classification_rule`, `start`, `end`, `points`, `coordinate_times` and `altitudes_baro_ft`. The last two are parallel to the coordinates; `coordinate_times` follows the togeojson `coordTimes` convention. There is also `position_sources`.
+Properties: `aircraft_id`, `segment`, `registration`, `callsigns`, `aircraft_type`, `aircraft_description`, `classification`, `classification_rule`, `operator`, `operator_short`, `role`, `role_rule`, `start`, `end`, `points`, `coordinate_times` and `altitudes_baro_ft`. The last two are parallel to the coordinates; `coordinate_times` follows the togeojson `coordTimes` convention. There is also `position_sources`.
 
 ## GeoJSON points
 

@@ -195,6 +195,7 @@ describe('App', () => {
   it('a selected aircraft that drops out shows last seen', async () => {
     const lost = {
       id: heli.id, registration: heli.registration, callsign: heli.callsign, class: heli.class,
+      operator_short: null, role: null,
       longitude: heli.longitude, latitude: heli.latitude, position_at: '2026-10-17T20:00:00.000+00:00',
       last_received_at: '2026-10-17T20:00:01.000+00:00', inside_visible: true,
     };
@@ -381,5 +382,67 @@ describe('Map extras', () => {
     await advance(0);
     expect(screen.queryByTestId('aircraft-list')).toBeNull();
     expect(screen.getByTestId('compact-toggle')).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+describe('Operators', () => {
+  const lapd = aircraft({
+    operator: 'LAPD Air Support Division', operator_short: 'LAPD', role: 'police', role_rule: 'catalog_hex',
+    role_source: 'FAA registry owner', role_checked: '2026-10-18', type_note: 'AS350B3',
+  });
+  const lasd = aircraft({
+    id: 'ad4835', registration: 'N955LA', callsign: 'N955LA', distance_m: 3000,
+    operator: 'LASD Aero Bureau', operator_short: 'LASD', role: 'police', role_rule: 'catalog_hex',
+    role_source: 'Inferred from base', role_checked: null,
+  });
+  const cessna = aircraft({
+    id: 'a00004', registration: 'N4Q', callsign: 'N4Q', class: 'aircraft', category: 'A1', distance_m: 4000,
+    description: 'CESSNA 172', role: 'private', role_rule: 'registry_owner_type', role_source: 'FAA registry',
+  });
+
+  it('tags the list and labels, and explains the identification in the detail panel', async () => {
+    render(App, { fetchFn: server([snapshot({ aircraft: [lapd, lasd, cessna] })]), pollMs: POLL });
+    await advance(0);
+    const list = screen.getByTestId('aircraft-list');
+    expect(within(list).getByText('LAPD')).toHaveClass('role-police');
+    expect(within(list).getByText('Private')).toHaveClass('role-private');
+
+    const labels = map().getSource('aircraft')!.setData.mock.calls.at(-1)![0].features.map(
+      (f: { properties: { label: string } }) => f.properties.label,
+    );
+    expect(labels).toEqual(['N225LA\n015 LAPD', 'N955LA\n015 LASD', 'N4Q\n015']);
+
+    await fireEvent.click(within(list).getByRole('button', { name: /N225LA/ }));
+    expect(screen.getByTestId('operator')).toHaveTextContent('LAPD Air Support Division (Police)');
+    expect(screen.getByTestId('detail')).toHaveTextContent('catalog, by ICAO address: FAA registry owner (confirmed 2026-10-18)');
+
+    await fireEvent.click(within(list).getByRole('button', { name: /N955LA/ }));
+    expect(screen.getByTestId('detail')).toHaveTextContent('(inferred, unconfirmed)');
+
+    await fireEvent.click(within(list).getByRole('button', { name: /N4Q/ }));
+    expect(screen.getByTestId('operator')).toHaveTextContent('Private owner (name withheld)');
+    expect(screen.getByTestId('detail')).toHaveTextContent('FAA registry lists individuals as owners');
+  });
+
+  it('hover cards name the operator', async () => {
+    render(App, { fetchFn: server([snapshot({ aircraft: [lapd, cessna] })]), pollMs: POLL });
+    await advance(0);
+    map().fire('mousemove:aircraft', { features: [{ properties: { id: lapd.id } }] });
+    await tick();
+    const card = screen.getByTestId('map-tooltip');
+    expect(within(card).getByText('LAPD')).toHaveClass('role-police');
+    expect(card).toHaveTextContent('LAPD Air Support Division · AEROSPATIALE AS-350 Ecureuil');
+
+    map().fire('mousemove:aircraft', { features: [{ properties: { id: cessna.id } }] });
+    await tick();
+    expect(screen.getByTestId('map-tooltip')).toHaveTextContent('N4QPrivate');
+    expect(screen.getByTestId('map-tooltip')).toHaveTextContent('CESSNA 172');
+  });
+
+  it('unidentified aircraft say so', async () => {
+    render(App, { fetchFn: server([snapshot({ aircraft: [heli] })]), pollMs: POLL });
+    await advance(0);
+    await fireEvent.click(screen.getByRole('button', { name: /N225LA/ }));
+    expect(screen.getByTestId('operator')).toHaveTextContent('Unknown (not in the catalog)');
   });
 });

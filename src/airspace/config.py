@@ -71,6 +71,8 @@ class Storage(BaseModel):
 
 class Enrich(BaseModel):
     hangarbay_db: Path | None = Path("~/.hangarbay/data/publish/registry.duckdb")
+    # Operator and role catalogs: CSV files or directories of them (see catalogs/)
+    catalogs: list[Path] = [Path("catalogs")]
 
 
 class Config(BaseModel):
@@ -147,6 +149,8 @@ retention_days = 7
 [enrich]
 # hangarbay's FAA registry; delete this line to disable lookups
 hangarbay_db = "~/.hangarbay/data/publish/registry.duckdb"
+# Operator and role catalogs: CSV files or directories of them
+catalogs = ["catalogs"]
 """
 
 

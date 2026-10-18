@@ -3,6 +3,7 @@
 export type Freshness = 'fresh' | 'fading' | 'unknown' | 'hidden';
 export type FeedStatus = 'starting' | 'live' | 'delayed' | 'degraded' | 'stale' | 'paused';
 export type AircraftClass = 'rotorcraft' | 'gyroplane' | 'surface' | 'aircraft' | 'unknown';
+export type Role = 'police' | 'fire' | 'medical' | 'news' | 'military' | 'tour' | 'utility' | 'training' | 'private';
 
 /** [longitude, latitude] */
 export type LonLat = [number, number];
@@ -16,6 +17,15 @@ export interface Aircraft {
   category: string | null;
   class: AircraftClass;
   class_rule: string;
+  /** From the operator catalog; all null when the aircraft isn't identified */
+  operator: string | null;
+  operator_short: string | null;
+  role: Role | null;
+  role_rule: string | null;
+  role_source: string | null;
+  /** Date the identification was confirmed; null when inferred */
+  role_checked: string | null;
+  type_note: string | null;
   position_source: string | null;
   longitude: number;
   latitude: number;
@@ -45,6 +55,8 @@ export interface LastSeen {
   registration: string | null;
   callsign: string | null;
   class: AircraftClass;
+  operator_short: string | null;
+  role: Role | null;
   longitude: number;
   latitude: number;
   position_at: string | null;

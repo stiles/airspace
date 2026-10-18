@@ -122,12 +122,12 @@ def position_age_s(obs: Observation, now: datetime) -> float | None:
 
 
 class StateBuilder:
-    def __init__(self, config: Config, *, classifier=None, mode: str = "live"):
+    def __init__(self, config: Config, *, identity=None, mode: str = "live"):
         self.config = config
         self.mode = mode
         self.provider = config.collector.provider
-        # Callable (aircraft_id, category) -> Classification; defaults to category-only rules
-        self.classifier = classifier or (lambda aircraft_id, category: classify(category))
+        # A RegistryCache (classify and operator); without one, category-only rules and no operators
+        self.identity = identity
         self.tracks: dict[str, Track] = {}
         self.feed = FeedTracker()
         self.events: deque[dict] = deque(maxlen=MAX_EVENTS)
@@ -243,7 +243,14 @@ class StateBuilder:
         bearing, meters = bearing_distance(home.latitude, home.longitude, obs.latitude, obs.longitude)
         age = position_age_s(obs, now)
         received_age = (now - track.last_received_at).total_seconds()
-        classification: Classification = self.classifier(track.aircraft_id, obs.category)
+        if self.identity is not None:
+            classification: Classification = self.identity.classify(track.aircraft_id, obs.category)
+            operator = self.identity.operator(
+                track.aircraft_id, kind=classification.kind, registration=obs.registration,
+                callsign=obs.callsign, owner=obs.owner_operator,
+            )  # fmt: skip
+        else:
+            classification, operator = classify(obs.category), None
         return {
             "id": track.aircraft_id,
             "registration": obs.registration,
@@ -253,6 +260,14 @@ class StateBuilder:
             "category": obs.category,
             "class": classification.kind,
             "class_rule": classification.rule,
+            "operator": operator.name if operator else None,
+            "operator_short": operator.short if operator else None,
+            "role": operator.role if operator else None,
+            "role_rule": operator.rule if operator else None,
+            "role_source": operator.source if operator else None,
+            "role_checked": operator.checked if operator else None,
+            "type_note": operator.note if operator else None,
+            "_operator": operator,
             "position_source": obs.position_source,
             "longitude": obs.longitude,
             "latitude": obs.latitude,
@@ -285,10 +300,12 @@ class StateBuilder:
             if track.last_received_at > now:
                 continue
             item = self._aircraft(track, now)
+            item.pop("_operator")
             if item["freshness"] == "hidden":
                 last_seen.append(
-                    {k: item[k] for k in ("id", "registration", "callsign", "class", "longitude", "latitude",
-                                          "position_at", "last_received_at", "inside_visible")}  # fmt: skip
+                    {k: item[k] for k in ("id", "registration", "callsign", "class", "operator_short", "role",
+                                          "longitude", "latitude", "position_at", "last_received_at",
+                                          "inside_visible")}  # fmt: skip
                 )
             else:
                 shown.append(item)
@@ -319,7 +336,11 @@ class StateBuilder:
         if track is None:
             return None
         item = self._aircraft(track, now)
-        item["owner_operator"] = track.latest.owner_operator
+        operator = item.pop("_operator")
+        # Owners the FAA registry lists as individuals are never shown
+        private = operator is not None and operator.private
+        item["owner_operator"] = None if private else track.latest.owner_operator
+        item["owner_hidden"] = private
         item["recent_positions"] = [
             {
                 "position_at": to_iso(p.position_at),

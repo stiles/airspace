@@ -1,0 +1,19 @@
+pattern,operator,operator_short,role,source
+\bLAPD\b|LOS ANGELES POLICE,LAPD Air Support Division,LAPD,police,Agency name in FAA registry owner
+SHERIFF.*LOS ANGELES|LOS ANGELES.*SHERIFF,LASD Aero Bureau,LASD,police,Agency name in FAA registry owner
+COUNTY OF LOS ANGELES FIRE|CONSOLIDATED FIRE PROTECTION DISTRICT OF (LA|LOS ANGELES) COUNTY,LA County Fire Air Operations,LACoFD,fire,Agency name in FAA registry owner
+LOS ANGELES (DEPT|DEPARTMENT) OF WATER,Los Angeles Department of Water and Power,LADWP,utility,Agency name in FAA registry owner
+CALIFORNIA HIGHWAY PATROL,"California Highway Patrol, Office of Air Operations",CHP,police,Agency name in FAA registry owner
+CALIFORNIA (DEPT|DEPARTMENT) OF FORESTRY|\bCAL ?FIRE\b,CAL FIRE,CAL FIRE,fire,Agency name in FAA registry owner
+SOUTHERN CALIFORNIA EDISON,Southern California Edison,SCE,utility,Company name in FAA registry owner
+\bPOLICE\b,,,police,Generic: owner name includes POLICE
+\bSHERIFF,,,police,Generic: owner name includes SHERIFF
+\b(HIGHWAY|STATE) PATROL\b,,,police,Generic: owner name includes HIGHWAY PATROL or STATE PATROL
+\bFIRE (DEPT|DEPARTMENT|PROTECTION|AUTHORITY|DISTRICT|RESCUE)\b,,,fire,Generic: owner name names a fire agency
+\bU ?S CUSTOMS\b|CUSTOMS AND BORDER PROTECTION,U.S. Customs and Border Protection,CBP,police,Agency name in FAA registry owner
+\b(UNITED STATES|U ?S) (ARMY|NAVY|AIR FORCE|MARINE CORPS|COAST GUARD)\b|NATIONAL GUARD,,,military,Generic: owner name names a military service
+\bAIR METHODS\b,Air Methods,,medical,Air medical operator's name in FAA registry owner
+\bPHI (AIR MEDICAL|HEALTH)\b,PHI Air Medical,,medical,Air medical operator's name in FAA registry owner
+\bREACH AIR MEDICAL\b,REACH Air Medical Services,,medical,Air medical operator's name in FAA registry owner
+\bMERCY AIR\b,Mercy Air,,medical,Air medical operator's name in FAA registry owner
+\b(BROADCASTING|TELEVISION|NEXSTAR|TEGNA)\b,,,news,Generic: broadcaster owns the aircraft
