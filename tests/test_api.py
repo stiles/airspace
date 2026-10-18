@@ -60,6 +60,7 @@ def test_live_endpoints(config, ok_transport):
 
         health = client.get("/api/health").json()
         assert health["collector_running"] and health["aircraft_shown"] == 54
+        assert set(health["process"]) == {"footprint_mb", "rss_mb"}
 
         sessions = client.get("/api/sessions").json()
         assert sessions[-1]["mode"] == "serve" and sessions[-1]["id"] == state["session_id"]

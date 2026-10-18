@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+from collections import OrderedDict
 from datetime import datetime, timedelta
 
 from airspace.classify import Classification, classify
@@ -10,27 +12,47 @@ from airspace.state import StateBuilder
 from airspace.storage import Store
 
 
-class RegistryCache:
-    """Per-aircraft FAA registry results, looked up once per ID outside the polling loop."""
+# Enough for several days of distinct aircraft near LA (about 600 overnight); older entries
+# are looked up again if they come back
+MAX_REGISTRY_RECORDS = 5000
 
-    def __init__(self, registry=None):
+
+class RegistryCache:
+    """Per-aircraft FAA registry results, looked up once per ID outside the polling loop.
+
+    Least recently used entries are dropped past `max_records`, so a long run stays bounded.
+    """
+
+    def __init__(self, registry=None, max_records: int = MAX_REGISTRY_RECORDS):
         self.registry = registry
-        self.records: dict[str, dict | None] = {}
+        self.max_records = max_records
+        self.records: OrderedDict[str, dict | None] = OrderedDict()
+        # Lookups resolve on a worker thread while the event loop classifies
+        self._lock = threading.Lock()
 
     def unresolved(self, aircraft_ids) -> list[str]:
         if self.registry is None:
             return []
-        return [aid for aid in aircraft_ids if aid not in self.records]
+        with self._lock:
+            return [aid for aid in aircraft_ids if aid not in self.records]
 
     def resolve(self, aircraft_ids: list[str]) -> None:
         if not aircraft_ids or self.registry is None:
             return
         found = self.registry.lookup(aircraft_ids)
-        for aid in aircraft_ids:
-            self.records[aid] = found.get(aid)
+        with self._lock:
+            for aid in aircraft_ids:
+                self.records[aid] = found.get(aid)
+                self.records.move_to_end(aid)
+            while len(self.records) > self.max_records:
+                self.records.popitem(last=False)
 
     def classify(self, aircraft_id: str, category: str | None) -> Classification:
-        return classify(category, self.records.get(aircraft_id))
+        with self._lock:
+            record = self.records.get(aircraft_id)
+            if aircraft_id in self.records:
+                self.records.move_to_end(aircraft_id)
+        return classify(category, record)
 
 
 def lookback(config: Config) -> timedelta:

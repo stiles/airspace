@@ -96,6 +96,7 @@ def build(store: Store, session_id: int, config: Config, registry: cls.Registry 
         "gaps": _gaps(airborne_rows, config, sleeps),
         "tisb_duplicates": _tisb_duplicates(airborne_rows),
         "storage": _storage(store, session_id, polls, len(rows)),
+        "process": _process(store, session_id),
         "registry": registry is not None,
     }
 
@@ -308,6 +309,23 @@ def _storage(store: Store, session_id: int, polls: list[dict], session_rows: int
     }
 
 
+def _process(store: Store, session_id: int) -> dict | None:
+    """Memory readings recorded hourly by the collector; growth is first to last reading."""
+    readings = [(from_iso(r["at"]), r["footprint_bytes"] or r["rss_bytes"]) for r in store.process_stats(session_id)]
+    readings = [(at, value) for at, value in readings if value is not None]
+    if not readings:
+        return None
+    (first_at, first), (last_at, last) = readings[0], readings[-1]
+    hours = (last_at - first_at).total_seconds() / 3600
+    return {
+        "readings": len(readings),
+        "first_bytes": first,
+        "last_bytes": last,
+        "peak_bytes": max(value for _, value in readings),
+        "growth_bytes_per_hour": (last - first) / hours if hours >= 1 else None,
+    }
+
+
 def gate(report: dict, config: Config) -> dict[str, str]:
     """Milestone 1 project targets; not provider guarantees."""
     req, pos = report["requests"], report["positions"]
@@ -460,6 +478,19 @@ def render(report: dict, config: Config) -> str:
         f"{_fmt(st['db_bytes_per_hour'] and st['db_bytes_per_hour'] / mb, '.1f', ' MB')}/hour",
         f"- Raw responses (gzip): {st['raw_bytes'] / mb:.1f} MB, "
         f"{_fmt(st['raw_bytes_per_hour'] and st['raw_bytes_per_hour'] / mb, '.1f', ' MB')}/hour",
+    ]
+    pr = report["process"]
+    if pr:
+        growth = pr["growth_bytes_per_hour"]
+        lines += [
+            "",
+            "## Process memory",
+            "",
+            f"- {pr['readings']} hourly readings: first {pr['first_bytes'] / mb:.1f} MB, last {pr['last_bytes'] / mb:.1f} MB, "
+            f"peak {pr['peak_bytes'] / mb:.1f} MB",
+            f"- Growth: {_fmt(growth and growth / mb, '+.2f', ' MB')}/hour (first to last reading)",
+        ]
+    lines += [
         "",
         "Visible or audible aircraft missing from the feed are an informal check; note them separately.",
     ]

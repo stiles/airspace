@@ -2,7 +2,7 @@
 
 The original technical plan (prepared October 17, 2026, as SPEC.md), with the decisions made while building each milestone and notes on how the pieces work. The [README](README.md) covers installing and using the tool.
 
-**Status:** milestones 1–4 are built. Milestone 5's soak test is running (see [5. Decide on continuous operation](#5-decide-on-continuous-operation)).
+**Status:** milestones 1–4 are built. Milestone 5's soak test passed, and retention, memory tracking and a bounded registry cache were added for continuous operation (see [5. Decide on continuous operation](#5-decide-on-continuous-operation)).
 
 ## Objective
 
@@ -258,19 +258,23 @@ Built October 17, 2026. Decisions made during implementation:
 
 Run an eight-hour soak test after the shorter milestones pass. Inspect memory, database growth, request counts and reconnection behavior. Only then decide whether the API is sufficient or a local receiver would be worthwhile. Hardware selection follows a reception/antenna assessment; MLAT-only position recovery generally needs a receiver network, so one receiver does not guarantee complete helicopter coverage.
 
-In progress: session 4, `airspace serve` under `caffeinate -i`, started October 18, 2026, 00:03 UTC and left running overnight. At 3 hr 47 min:
+Soak test: session 4, `airspace serve` under `caffeinate -i` from October 17, 2026, 5:03 p.m. PDT, overnight to about 6:40 a.m. (13.5 hours).
 
-- 1,363 of 1,363 polls succeeded (latency median 258 ms, p95 340 ms), with no host sleep.
-- Physical memory footprint flat at about 140 MB (peak 145 MB). RSS reads about 458 MB because it counts freed pages macOS hasn't reclaimed.
-- 30 open files and two sockets (the API listener and one keep-alive connection to adsb.fi).
-- SQLite grows 3.9 MB/hour and gzipped raw responses 1.2 MB/hour, about 120 MB/day together. The WAL stays near 4 MB, so checkpoints are keeping up.
-- Airborne p95 position age in the visible area 5.5 s; 18 rotorcraft, most at 97–99% continuity.
+- 4,819 of 4,819 scheduled polls succeeded before the deliberate outage, exactly 360 an hour. Latency median 256 ms, p95 324 ms, max 1.3 s against an 8 s timeout. No host sleep.
+- Airborne p95 position age in the visible area 4.5 s. 604 unique aircraft and 19 rotorcraft. Observations fell from about 13,000 an hour in the evening to about 3,100 at 3–4 a.m., which is traffic, not dropouts.
+- Physical memory footprint 140 MB at hour 4 and 147.5 MB at hours 13 and 13.5 (peak 151 MB). RSS reads higher (about 500 MB) because it counts freed pages macOS hasn't reclaimed. Two readings can't separate slow growth from allocator settling, which is why the collector now records memory hourly.
+- 30 open files and two sockets at hour 4 and hour 13: no handle or connection leak.
+- SQLite 2.8 MB/hour overall (lower overnight) plus about 1 MB/hour of raw responses; the WAL stayed near 4 MB.
+- Reconnection: Wi-Fi off from 6:31 a.m. for about three minutes. Each failure was a DNS `ConnectError`, classified transient; retries backed off (19 s, 20 s, 47 s, then 139 s), so the four-minute data gap cost four failed requests instead of about 23. The feed went `stale` in the API and dashboard. The first retry after Wi-Fi returned succeeded and the 10-second cadence resumed at once, with no burst and no false sleep gap.
 
-Open items:
+Decision: the adsb.fi API is sufficient for continuous personal use. Freshness doesn't justify a local receiver; one would only help with aircraft absent from the feed, which the feed itself can't measure. Changes made for continuous operation:
 
-- Reconnection hasn't been exercised: the provider never failed. Test by dropping Wi-Fi for about two minutes.
-- `storage.retention_days` is in the config but nothing enforces it, so the database grows without bound. Continuous operation needs pruning of old observations (and probably `store_raw = false`).
-- Final readings after the overnight run, comparing the first and second halves for drift.
+- `storage.retention_days` (default 7) is now enforced. The collector prunes on start and hourly, in short transactions by poll ID; on a copy of the soak database, removing 132,000 observations took 0.35 s. Sessions emptied by pruning are deleted with their raw files.
+- `store_raw` defaults to false.
+- The FAA registry cache is least-recently-used, capped at 5,000 aircraft.
+- The collector records its memory footprint hourly (`process_stats` table), the report shows first, last, peak and growth per hour, and `/api/health` includes current memory.
+
+Open: where it runs. A laptop under `caffeinate` works for sessions; continuous operation wants an always-on machine (a Mac mini or Raspberry Pi) under `launchd` or `systemd`. The next long run should check the hourly memory trend.
 
 ## Implementation notes
 

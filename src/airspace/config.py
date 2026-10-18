@@ -46,7 +46,8 @@ class Collector(BaseModel):
     max_backoff_s: float = Field(default=300.0, gt=0)
     # Consecutive schema errors before collection pauses
     schema_error_limit: int = Field(default=3, ge=1)
-    store_raw: bool = True
+    # Gzipped raw responses, for diagnosing the provider; about 1 MB/hour
+    store_raw: bool = False
 
     @model_validator(mode="after")
     def timeout_below_interval(self) -> Collector:
@@ -64,7 +65,8 @@ class Freshness(BaseModel):
 
 class Storage(BaseModel):
     data_dir: Path = Path("data")
-    retention_days: int = 7
+    # Recorded polls and observations older than this are pruned hourly; 0 keeps everything
+    retention_days: int = Field(default=7, ge=0)
 
 
 class Enrich(BaseModel):
@@ -128,8 +130,8 @@ poll_interval_s = 10.0
 timeout_s = 8.0
 max_backoff_s = 300.0
 schema_error_limit = 3
-# Keep gzipped raw responses (diagnostic trials only)
-store_raw = true
+# Keep gzipped raw responses, about 1 MB/hour (for diagnosing the provider)
+store_raw = false
 
 [freshness]
 fade_s = 20.0
@@ -139,6 +141,7 @@ trail_duration_s = 300.0
 
 [storage]
 data_dir = "data"
+# Polls and observations older than this are pruned hourly; 0 keeps everything
 retention_days = 7
 
 [enrich]

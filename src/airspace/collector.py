@@ -8,9 +8,11 @@ import random
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
+from airspace import procinfo
 from airspace.config import Config
 from airspace.models import ErrorKind, PollResult
 from airspace.providers.base import Provider, fetch
@@ -22,6 +24,8 @@ log = logging.getLogger(__name__)
 # (on macOS, time.monotonic() does not advance during sleep)
 SLEEP_DETECT_S = 5.0
 WAIT_STEP_S = 1.0
+# Retention pruning and the memory reading run on start and then this often (wall clock)
+MAINTENANCE_S = 3600.0
 
 
 @dataclass
@@ -42,6 +46,7 @@ class Collector:
         clock: Clock | None = None,
         jitter: Callable[[float, float], float] = random.uniform,
         on_poll: Callable[[PollResult], None] | None = None,
+        memory: Callable[[], procinfo.Memory] = procinfo.memory,
     ):
         self.config = config
         self.provider = provider
@@ -50,6 +55,8 @@ class Collector:
         self.clock = clock or Clock()
         self.jitter = jitter
         self.on_poll = on_poll
+        self.memory = memory
+        self._next_maintenance: float | None = None
 
         self.session_id: int | None = None
         self.paused: str | None = None
@@ -69,6 +76,33 @@ class Collector:
         if self.on_poll:
             self.on_poll(result)
         return result
+
+    def maintain(self) -> None:
+        """Apply the retention window and record this process's memory."""
+        days = self.config.storage.retention_days
+        if days:
+            now = datetime.fromtimestamp(self.clock.wall(), UTC)
+            pruned = self.store.prune(now - timedelta(days=days), keep_session=self.session_id)
+            if pruned.polls or pruned.sessions:
+                log.info(
+                    "retention (%d days): removed %d polls, %d observations, sessions %s",
+                    days, pruned.polls, pruned.observations, pruned.sessions or "none",
+                )
+        mem = self.memory()
+        self.store.record_process_stats(self.session_id, mem.footprint_bytes, mem.rss_bytes)
+        if mem.footprint_bytes is not None:
+            log.info("memory footprint %.1f MB", mem.footprint_bytes / 1024 / 1024)
+
+    def _maybe_maintain(self) -> None:
+        now = self.clock.wall()
+        if self._next_maintenance is not None and now < self._next_maintenance:
+            return
+        self._next_maintenance = now + MAINTENANCE_S
+        try:
+            self.maintain()
+        except Exception:
+            # Housekeeping must never stop collection
+            log.exception("maintenance failed")
 
     def next_delay(self, result: PollResult) -> float:
         """Seconds from this poll's start to the next one. Sets `paused` on unrecoverable errors."""
@@ -113,6 +147,7 @@ class Collector:
                 return reason
             started = self.clock.monotonic()
             result = await self.poll_once()
+            self._maybe_maintain()
             delay = self.next_delay(result)
             if self.paused:
                 log.error("collection paused: %s", self.paused)

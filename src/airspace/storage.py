@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -85,6 +86,15 @@ CREATE TABLE IF NOT EXISTS rejections (
     reason TEXT NOT NULL,
     raw_json TEXT
 );
+
+-- Hourly readings of the collector process, for spotting slow memory growth in long runs
+CREATE TABLE IF NOT EXISTS process_stats (
+    id INTEGER PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES sessions(id),
+    at TEXT NOT NULL,
+    footprint_bytes INTEGER,
+    rss_bytes INTEGER
+);
 """
 
 OBSERVATION_COLUMNS = [
@@ -131,6 +141,17 @@ def _observation_values(obs: Observation) -> list:
             value = int(value)
         values.append(value)
     return values
+
+
+# Polls deleted per transaction while pruning, so the writer never holds a long lock
+PRUNE_BATCH_POLLS = 2000
+
+
+@dataclass
+class PruneResult:
+    polls: int = 0
+    observations: int = 0
+    sessions: list[int] | None = None
 
 
 class Store:
@@ -220,6 +241,66 @@ class Store:
                 (session_id, kind, now, gap_s),
             )
         return cur.lastrowid
+
+    def record_process_stats(self, session_id: int, footprint_bytes: int | None, rss_bytes: int | None) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO process_stats (session_id, at, footprint_bytes, rss_bytes) VALUES (?, ?, ?, ?)",
+                (session_id, to_iso(utcnow()), footprint_bytes, rss_bytes),
+            )
+
+    def process_stats(self, session_id: int) -> list[sqlite3.Row]:
+        try:
+            return self.conn.execute(
+                "SELECT at, footprint_bytes, rss_bytes FROM process_stats WHERE session_id = ? ORDER BY id",
+                (session_id,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            # A database last written by a version without the table, opened read-only
+            return []
+
+    def prune(self, before: datetime, *, keep_session: int | None = None) -> PruneResult:
+        """Delete polls, observations and rejections recorded before `before`, then sessions that leaves empty.
+
+        Poll IDs increase with time, so deletion walks ID ranges in short transactions on
+        the poll index. Freed pages are reused; the file doesn't shrink without VACUUM.
+        """
+        cutoff = to_iso(before)
+        result = PruneResult(sessions=[])
+        bounds = self.conn.execute("SELECT MIN(id), MAX(id) FROM polls WHERE requested_at < ?", (cutoff,)).fetchone()
+        lo, hi = bounds[0], bounds[1]
+        touched: list[int] = []
+        if lo is not None:
+            touched = [
+                row[0]
+                for row in self.conn.execute("SELECT DISTINCT session_id FROM polls WHERE id BETWEEN ? AND ?", (lo, hi))
+            ]
+            for start in range(lo, hi + 1, PRUNE_BATCH_POLLS):
+                end = min(start + PRUNE_BATCH_POLLS - 1, hi)
+                with self.conn:
+                    self.conn.execute("DELETE FROM rejections WHERE poll_id BETWEEN ? AND ?", (start, end))
+                    cur = self.conn.execute("DELETE FROM observations WHERE poll_id BETWEEN ? AND ?", (start, end))
+                    result.observations += cur.rowcount
+                    cur = self.conn.execute("DELETE FROM polls WHERE id BETWEEN ? AND ?", (start, end))
+                    result.polls += cur.rowcount
+
+        with self.conn:
+            self.conn.execute("DELETE FROM process_stats WHERE at < ?", (cutoff,))
+            # Only sessions this prune emptied; a session that never recorded a poll is left alone
+            empty = [
+                sid
+                for sid in touched
+                if sid != keep_session
+                and self.conn.execute("SELECT 1 FROM polls WHERE session_id = ? LIMIT 1", (sid,)).fetchone() is None
+            ]
+            for session_id in empty:
+                self.conn.execute("DELETE FROM process_stats WHERE session_id = ?", (session_id,))
+                self.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        # Raw files go with their sessions; a surviving session keeps its whole raw file
+        for session_id in empty:
+            self.raw_path(session_id).unlink(missing_ok=True)
+        result.sessions = empty
+        return result
 
     def raw_path(self, session_id: int) -> Path:
         return self.raw_dir / f"session-{session_id:04d}.jsonl.gz"

@@ -91,7 +91,7 @@ Exports include source, terms and timestamp provenance and never include the hom
 | --- | --- |
 | `GET /api/state` | Snapshot: aircraft by distance with freshness and trails, recently lost aircraft, entry/exit events, area and feed status |
 | `GET /api/aircraft/{id}` | One aircraft with owner/operator and recent positions |
-| `GET /api/health` | Collector status, feed status and a position-age summary |
+| `GET /api/health` | Collector status, feed status, a position-age summary and the process's memory |
 | `GET /api/sessions` | Recorded sessions |
 | `GET /api/replay?session_id=&at=` | Snapshot rebuilt from records received by `at` (ISO 8601) |
 | `GET /api/sessions/{id}/timeline` | Per-poll outcomes and sleep gaps, for the replay bar |
@@ -105,12 +105,14 @@ Exports include source, terms and timestamp provenance and never include the hom
 | --- | --- |
 | `[home]` | `latitude`, `longitude`, `label` |
 | `[area]` | `visible_radius_mi` (5), `collection_radius_nm` (10), `max_altitude_baro_ft` (initial filter preset) |
-| `[collector]` | `poll_interval_s` (10), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (keep gzipped raw responses) |
+| `[collector]` | `poll_interval_s` (10), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (false; keep gzipped raw responses) |
 | `[freshness]` | `fade_s` (20), `hide_s` (60), `trail_gap_s` (30), `trail_duration_s` (300) |
-| `[storage]` | `data_dir` (`data`); `retention_days` isn't enforced yet, so the database grows until pruned |
+| `[storage]` | `data_dir` (`data`), `retention_days` (7; 0 keeps everything) |
 | `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off |
 
-Storage runs about 4 MB/hour in SQLite, plus about 1 MB/hour with `store_raw = true`.
+The collector prunes recordings older than `retention_days` when it starts and every hour after, removing sessions it empties along with their raw files. SQLite grows about 3–4 MB/hour, so a week takes roughly 600 MB; `store_raw = true` adds about 1 MB/hour. Deleted space is reused rather than returned to the disk; run `sqlite3 data/airspace.sqlite VACUUM` with the collector stopped to shrink the file.
+
+Each hour the collector also records its memory use, which `airspace report` shows as a trend.
 
 ## Helicopter classification
 

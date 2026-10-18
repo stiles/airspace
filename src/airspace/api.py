@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from airspace.collector import Clock, Collector
 from airspace.config import Config
 from airspace import export as export_mod
+from airspace import procinfo
 from airspace.enrich import HangarbayRegistry
 from airspace.models import PollResult, from_iso, utcnow
 from airspace.providers import get_provider
@@ -186,6 +187,7 @@ def create_app(
                 "max": max(ages) if ages else None,
             },
             "registry_lookups": service.cache.registry is not None,
+            "process": procinfo.memory().as_dict(),
         }
 
     @app.get("/api/sessions")
