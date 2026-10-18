@@ -368,6 +368,55 @@
     position: absolute;
     inset: 0;
   }
+  /* Zoom buttons in the dashboard's control style; Mapbox's icons are dark images, so redraw them as masks */
+  .map :global(.mapboxgl-ctrl-group) {
+    border: 1px solid var(--control-line);
+    border-radius: 4px;
+    background: rgba(5, 12, 8, 0.88);
+    box-shadow: none;
+    overflow: hidden;
+  }
+  .map :global(.mapboxgl-ctrl-group button) {
+    width: 28px;
+    height: 28px;
+    background: transparent;
+  }
+  .map :global(.mapboxgl-ctrl-group button + button) {
+    border-top: 1px solid var(--line);
+  }
+  .map :global(.mapboxgl-ctrl-group button:not(:disabled):hover) {
+    background: var(--hover);
+  }
+  .map :global(.mapboxgl-ctrl-group button:focus-visible) {
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .map :global(.mapboxgl-ctrl-group .mapboxgl-ctrl-icon) {
+    background: var(--muted-strong);
+    mask: var(--icon) center / 14px 14px no-repeat;
+  }
+  .map :global(.mapboxgl-ctrl-group button:not(:disabled):hover .mapboxgl-ctrl-icon) {
+    background: var(--text);
+  }
+  .map :global(.mapboxgl-ctrl-group button:disabled .mapboxgl-ctrl-icon) {
+    background: var(--faint);
+  }
+  /* Attribution stays visible and legible (Mapbox requires it); only its colors change */
+  .map :global(.mapboxgl-ctrl-attrib) {
+    background: rgba(5, 12, 8, 0.75);
+    color: var(--muted);
+  }
+  .map :global(.mapboxgl-ctrl-attrib a) {
+    color: var(--muted-strong);
+  }
+  .map :global(.mapboxgl-ctrl-attrib a:hover) {
+    color: var(--text);
+  }
+  .map :global(.mapboxgl-ctrl-zoom-in .mapboxgl-ctrl-icon) {
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M6 1h2v5h5v2H8v5H6V8H1V6h5z'/%3E%3C/svg%3E");
+  }
+  .map :global(.mapboxgl-ctrl-zoom-out .mapboxgl-ctrl-icon) {
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M1 6h12v2H1z'/%3E%3C/svg%3E");
+  }
   .recenter {
     position: absolute;
     top: 10px;
@@ -375,7 +424,7 @@
     padding: 6px 10px;
     border: 1px solid var(--control-line);
     border-radius: 4px;
-    background: rgba(17, 22, 26, 0.9);
+    background: rgba(5, 12, 8, 0.88);
     color: var(--text);
     font: inherit;
     font-size: 13px;
