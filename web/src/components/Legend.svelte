@@ -53,6 +53,7 @@
       Selected
     </li>
     <li><i class="line trail" aria-hidden="true"></i> Recent track</li>
+    <li><i class="orbit" aria-hidden="true"></i> Circling or hovering (inferred)</li>
     <li class="gap"><i class="dot" aria-hidden="true"></i> Home area</li>
     <li><i class="line ring" aria-hidden="true"></i> 1-mile rings</li>
     <li><i class="line visible" aria-hidden="true"></i> Visible area, {visibleLabel}</li>
@@ -145,6 +146,15 @@
   }
   .line.collection {
     border-top-style: dashed;
+  }
+  .orbit {
+    flex: none;
+    box-sizing: border-box;
+    width: 14px;
+    height: 14px;
+    margin: 0 1px;
+    border: 1.5px dashed var(--amber);
+    border-radius: 50%;
   }
   .dot {
     flex: none;

@@ -12,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 
 from airspace import __version__
+from airspace import behaviors as bh
+from airspace.classify import GYROPLANE, ROTORCRAFT
 from airspace.config import Config
 from airspace.models import from_iso, to_iso, utcnow
 from airspace.replay import RegistryCache
@@ -253,6 +255,47 @@ def _tracks(rows: list[dict], trail_gap_s: float) -> list[dict]:
     return features
 
 
+def _behavior_features(rows: list[dict], config: Config) -> list[dict]:
+    """One Point feature per episode, at its center. No distances from home."""
+    by_aircraft: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_aircraft[r["aircraft_id"]].append(r)
+    features = []
+    for aircraft_id, items in by_aircraft.items():
+        points = [
+            bh.Point(from_iso(r["position_at"]), r["latitude"], r["longitude"], r["altitude_baro_ft"],
+                     r["ground_speed_kt"], r["on_ground"])
+            for r in items if r["new_position"] and r["position_at"]
+        ]  # fmt: skip
+        last = items[-1]
+        rotorcraft = last["classification"] in (ROTORCRAFT, GYROPLANE)
+        for e in bh.detect(points, config.behavior, gap_s=config.freshness.trail_gap_s, rotorcraft=rotorcraft):
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [e.longitude, e.latitude]},
+                    "properties": {
+                        "aircraft_id": aircraft_id,
+                        "registration": last["registration"],
+                        "callsigns": sorted({r["callsign"] for r in items if r["callsign"]}),
+                        "classification": last["classification"],
+                        "operator": last["operator"],
+                        "operator_short": last["operator_short"],
+                        "role": last["role"],
+                        "behavior": e.kind,
+                        "start": to_iso(e.start),
+                        "end": to_iso(e.end),
+                        "duration_s": e.duration_s,
+                        "turns": e.turns,
+                        "radius_m": round(e.radius_m, 1),
+                        "altitude_baro_ft": e.altitude_baro_ft,
+                        "points": e.points,
+                    },
+                }
+            )
+    return sorted(features, key=lambda f: f["properties"]["start"])
+
+
 def to_geojson(
     store: Store,
     session_id: int,
@@ -264,12 +307,28 @@ def to_geojson(
     end=None,
     aircraft=None,
 ) -> dict:
-    if geometry not in ("tracks", "points"):
-        raise ValueError("geometry must be 'tracks' or 'points'")
+    if geometry not in ("tracks", "points", "behaviors"):
+        raise ValueError("geometry must be 'tracks', 'points' or 'behaviors'")
     rows = _rows(store, session_id, start, end, aircraft)
     _classify(rows, cache)
     trail_gap_s = config.freshness.trail_gap_s
-    if geometry == "tracks":
+    if geometry == "behaviors":
+        b = config.behavior
+        features = _behavior_features(rows, config)
+        extra = {
+            "geometry": "behaviors",
+            "behavior_rules": (
+                "Inferred from positions; they describe the track, not the reason. "
+                f"circling: net turn of 360 degrees within {b.circle_window_s:g}s, staying within "
+                f"{b.circle_max_radius_m:g} m, faster than {b.circle_min_speed_kt:g} kt; orbits over one spot up to "
+                f"{b.circle_merge_gap_s:g}s apart are one episode. hovering (helicopters): at most "
+                f"{b.hover_max_speed_kt:g} kt for {b.hover_min_s:g}s within {b.hover_max_drift_m:g} m. low (helicopters): "
+                f"barometric altitude at or below {b.low_altitude_ft:g} ft for {b.low_min_s:g}s; barometric altitude "
+                "is above sea level, not height above ground. Point is the episode's center; radius_m is the median "
+                "distance from it."
+            ),
+        }
+    elif geometry == "tracks":
         features = _tracks(rows, trail_gap_s)
         extra = {
             "geometry": "tracks",

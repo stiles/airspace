@@ -11,15 +11,14 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from airspace.classify import Classification, classify
+from airspace import behaviors
+from airspace.classify import GYROPLANE, ROTORCRAFT, Classification, classify
 from airspace.config import Config
-from airspace.geometry import METERS_PER_NM, bearing_distance
+from airspace.geometry import MAX_IMPLIED_SPEED_KT, bearing_distance, breaks_between  # noqa: F401 (re-exported)
 from airspace.models import Observation, PollResult, to_iso
 
 SNAPSHOT_VERSION = 1
 
-# Implied speed between consecutive positions above this splits the trail
-MAX_IMPLIED_SPEED_KT = 800.0
 MAX_EVENTS = 100
 
 ATTRIBUTION = {"adsbfi": {"name": "adsb.fi", "url": "https://adsb.fi"}}
@@ -34,6 +33,8 @@ class TrailPoint:
     inside: bool
     # Position age at receipt was within the fade threshold
     fresh: bool
+    ground_speed_kt: float | None = None
+    on_ground: bool | None = None
 
 
 @dataclass
@@ -42,6 +43,8 @@ class Track:
     latest: Observation  # newest position (or newest receipt when position time is unknown)
     last_received_at: datetime
     points: deque[TrailPoint] = field(default_factory=deque)
+    # (newest point time, rotorcraft, now) -> current episodes; detection reruns only on change
+    behavior_cache: tuple | None = None
 
 
 @dataclass
@@ -94,19 +97,6 @@ class FeedTracker:
             "last_error_at": to_iso(self.last_error_at),
             "paused": self.paused,
         }
-
-
-def breaks_between(
-    a_at: datetime, a_lat: float, a_lon: float, b_at: datetime, b_lat: float, b_lon: float, trail_gap_s: float
-) -> bool:
-    """A coverage gap or an implausible jump separates two consecutive positions."""
-    seconds = (b_at - a_at).total_seconds()
-    if seconds > trail_gap_s:
-        return True
-    if seconds <= 0:
-        return False
-    _, meters = bearing_distance(a_lat, a_lon, b_lat, b_lon)
-    return meters / METERS_PER_NM / (seconds / 3600) > MAX_IMPLIED_SPEED_KT
 
 
 def position_age_s(obs: Observation, now: datetime) -> float | None:
@@ -176,6 +166,8 @@ class StateBuilder:
             altitude_baro_ft=obs.altitude_baro_ft,
             inside=self._inside(obs),
             fresh=age is not None and age <= self.config.freshness.fade_s,
+            ground_speed_kt=obs.ground_speed_kt,
+            on_ground=obs.on_ground,
         )
         previous = track.points[-1] if track.points else None
         track.points.append(point)
@@ -206,7 +198,9 @@ class StateBuilder:
         )
 
     def _prune(self, now: datetime) -> None:
-        trail_cutoff = now - timedelta(seconds=self.config.freshness.trail_duration_s)
+        # Behavior detection needs more history than the drawn trail
+        keep_s = max(self.config.freshness.trail_duration_s, self.config.behavior.history_s)
+        trail_cutoff = now - timedelta(seconds=keep_s)
         drop_before = now - self._retention
         for aircraft_id in list(self.tracks):
             track = self.tracks[aircraft_id]
@@ -226,6 +220,46 @@ class StateBuilder:
             segments[-1].append([p.longitude, p.latitude])
             previous = p
         return [s for s in segments if len(s) > 1]
+
+    def _behaviors(self, track: Track, kind: str, now: datetime) -> list[dict]:
+        """Behaviors under way at `now`, from the kept history up to `now`."""
+        params = self.config.behavior
+        # Exactly the history window before `now`, so live and replay see the same positions
+        start = now - timedelta(seconds=params.history_s)
+        points = [p for p in track.points if start <= p.position_at <= now]
+        if len(points) < 3:
+            return []
+        rotorcraft = kind in (ROTORCRAFT, GYROPLANE)
+        key = (points[-1].position_at, len(points), rotorcraft)
+        if track.behavior_cache and track.behavior_cache[0] == key:
+            episodes = track.behavior_cache[1]
+        else:
+            episodes = behaviors.current(
+                behaviors.detect(
+                    [behaviors.Point(p.position_at, p.latitude, p.longitude, p.altitude_baro_ft, p.ground_speed_kt, p.on_ground)
+                     for p in points],
+                    params, gap_s=self.config.freshness.trail_gap_s, rotorcraft=rotorcraft,
+                ),
+                points[-1].position_at, params,
+            )  # fmt: skip
+            track.behavior_cache = (key, episodes)
+        # Began at the window's edge: the episode probably started earlier than we can see
+        window_full = (points[0].position_at - start).total_seconds() <= self.config.freshness.trail_gap_s
+        history_start = points[0].position_at
+        return [
+            {
+                "kind": e.kind,
+                "since": to_iso(e.start),
+                "duration_s": e.duration_s,
+                # The episode may have begun before the kept history
+                "at_least": window_full and e.start <= history_start,
+                "center": [e.longitude, e.latitude],
+                "radius_m": e.radius_m,
+                "turns": e.turns,
+                "altitude_baro_ft": e.altitude_baro_ft,
+            }
+            for e in episodes
+        ]
 
     def _freshness(self, age: float | None, received_age: float) -> str:
         f = self.config.freshness
@@ -290,6 +324,7 @@ class StateBuilder:
             "bearing_deg": bearing,
             "inside_visible": meters <= self.config.visible_radius_m,
             "trail": self._segments(track, now),
+            "behaviors": self._behaviors(track, classification.kind, now),
         }
 
     def snapshot(self, now: datetime) -> dict:

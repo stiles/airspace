@@ -74,3 +74,7 @@ flight-tracer render n224la/
 ```
 
 FlightTracer currently hardcodes "Source: ADS-B Exchange" on its images. For adsb.fi data that credit is wrong, and adsb.fi's terms require citing adsb.fi. Correct the source line before using a rendered image anywhere.
+
+## GeoJSON behaviors
+
+`airspace export --geometry behaviors` (or `geometry=behaviors` on the API) writes one Point per circling, hovering or low-flight episode, at its center. Properties: `aircraft_id`, `registration`, `callsigns`, `classification`, `operator`, `operator_short`, `role`, `behavior`, `start`, `end`, `duration_s`, `turns` (circling), `radius_m` (median distance from the center), `altitude_baro_ft` (median) and `points`. The metadata's `behavior_rules` states the thresholds used. Behaviors are inferred from positions and describe the track, not the reason for it; there are no distances from home.

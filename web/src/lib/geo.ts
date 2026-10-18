@@ -91,6 +91,28 @@ export function aircraftCollection(aircraft: Aircraft[], selectedId: string | nu
   };
 }
 
+export interface BehaviorProps {
+  id: string;
+  kind: string;
+  selected: boolean;
+}
+
+/** Rings around current circling and hovering episodes: center and median radius from the server. */
+export function behaviorCollection(aircraft: Aircraft[], selectedId: string | null): FeatureCollection<LineString, BehaviorProps> {
+  return {
+    type: 'FeatureCollection',
+    features: aircraft.flatMap((a) =>
+      a.behaviors
+        .filter((b) => b.kind !== 'low')
+        .map((b) => ({
+          type: 'Feature' as const,
+          geometry: { type: 'LineString' as const, coordinates: circle(b.center, Math.max(b.radius_m, 60), 64) },
+          properties: { id: a.id, kind: b.kind, selected: a.id === selectedId },
+        })),
+    ),
+  };
+}
+
 export interface TrailProps {
   id: string;
   kind: Aircraft['class'];

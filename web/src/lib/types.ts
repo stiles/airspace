@@ -8,6 +8,19 @@ export type Role = 'police' | 'fire' | 'medical' | 'news' | 'military' | 'tour' 
 /** [longitude, latitude] */
 export type LonLat = [number, number];
 
+/** Inferred from the track (circling, hovering, low flight); describes it, not the reason */
+export interface Behavior {
+  kind: 'circling' | 'hovering' | 'low';
+  since: string;
+  duration_s: number;
+  /** Began before the kept history, so it has lasted at least duration_s */
+  at_least: boolean;
+  center: LonLat;
+  radius_m: number;
+  turns: number | null;
+  altitude_baro_ft: number | null;
+}
+
 export interface Aircraft {
   id: string;
   registration: string | null;
@@ -48,6 +61,7 @@ export interface Aircraft {
   bearing_deg: number;
   inside_visible: boolean;
   trail: LonLat[][];
+  behaviors: Behavior[];
 }
 
 export interface LastSeen {

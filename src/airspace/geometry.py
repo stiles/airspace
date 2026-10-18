@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pyproj import Geod
 
 METERS_PER_MILE = 1609.344
 METERS_PER_NM = 1852.0
+# Implied speed between consecutive positions above this splits a trail
+MAX_IMPLIED_SPEED_KT = 800.0
 
 _GEOD = Geod(ellps="WGS84")
 
@@ -42,3 +46,16 @@ def destination(lat: float, lon: float, bearing_deg: float, meters: float) -> tu
     _check(lat, lon)
     dest_lon, dest_lat, _ = _GEOD.fwd(lon, lat, bearing_deg, meters)
     return dest_lat, dest_lon
+
+
+def breaks_between(
+    a_at: datetime, a_lat: float, a_lon: float, b_at: datetime, b_lat: float, b_lon: float, trail_gap_s: float
+) -> bool:
+    """A coverage gap or an implausible jump separates two consecutive positions."""
+    seconds = (b_at - a_at).total_seconds()
+    if seconds > trail_gap_s:
+        return True
+    if seconds <= 0:
+        return False
+    _, meters = bearing_distance(a_lat, a_lon, b_lat, b_lon)
+    return meters / METERS_PER_NM / (seconds / 3600) > MAX_IMPLIED_SPEED_KT

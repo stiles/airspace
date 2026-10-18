@@ -261,7 +261,7 @@ def export(
     config_file: ConfigOption = None,
     session: Annotated[str, typer.Option(help="Session ID or 'latest'")] = "latest",
     format: Annotated[str, typer.Option(help="geojson, json or flighttracer")] = "geojson",
-    geometry: Annotated[str, typer.Option(help="For geojson: tracks or points")] = "tracks",
+    geometry: Annotated[str, typer.Option(help="For geojson: tracks, points or behaviors")] = "tracks",
     aircraft: Annotated[list[str] | None, typer.Option(help="Aircraft ID (ICAO hex); repeatable")] = None,
     start: Annotated[str | None, typer.Option(help="ISO 8601 receipt time")] = None,
     end: Annotated[str | None, typer.Option(help="ISO 8601 receipt time")] = None,

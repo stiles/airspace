@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { altitude, cardinal, identity, miles, operatorTag } from '../lib/format';
+  import { altitude, behaviorChip, cardinal, identity, miles, operatorTag } from '../lib/format';
   import type { Aircraft } from '../lib/types';
 
   interface Props {
@@ -33,6 +33,9 @@
               {#if operatorTag(a)}
                 <span class="tag role-{a.role}" title={a.operator ?? undefined}>{operatorTag(a)}</span>
               {/if}
+              {#each a.behaviors as b (b.kind)}
+                <span class="behavior" data-testid="behavior-chip">{behaviorChip(b)}</span>
+              {/each}
             </span>
             <span class="type">{a.description ?? a.aircraft_type ?? 'Type unknown'}</span>
           </span>
@@ -116,6 +119,15 @@
     letter-spacing: 0.04em;
     line-height: 14px;
     text-transform: uppercase;
+  }
+  .behavior {
+    flex: none;
+    color: var(--amber);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .behavior::before {
+    content: '◌ ';
   }
   .name {
     grid-area: name;

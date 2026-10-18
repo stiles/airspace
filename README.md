@@ -14,6 +14,7 @@ What's flying near home right now? Airspace is a local aircraft tracker. It poll
 - **Exports:** JSON or GeoJSON (tracks or points) with provenance, and run folders for [FlightTracer](https://github.com/stiles/flight-tracer).
 - **Coverage reports:** request success, position age, helicopter continuity, gaps and storage for any recorded session.
 - **Compact mode:** a map-only layout for a small always-on window.
+- **Behaviors:** circling, hovering and low flight, inferred from each track and shown as chips, hover-card lines and dashed rings on the map, with an export for stories.
 - **Adaptive polling:** one request every 10 seconds, or every 2 seconds while a helicopter or public-safety aircraft is in the visible area, so orbits read as circles rather than triangles.
 - **Local only:** one collector, one request at a time, an API bound to `127.0.0.1`. The browser never contacts the data provider.
 
@@ -82,6 +83,7 @@ From the replay bar (a whole session) or the detail panel (one aircraft), or on 
 uv run airspace export --session latest --format geojson --geometry tracks -o tracks.geojson
 uv run airspace export --format json --start 2026-10-17T19:00:00Z --end 2026-10-17T20:00:00Z -o hour.json
 uv run airspace export --format flighttracer --aircraft a1f0d8 -o runs/n224la
+uv run airspace export --geometry behaviors -o orbits.geojson     # one point per circling/hovering episode
 ```
 
 Exports include source, terms and timestamp provenance and never include the home point. See [docs/exports.md](docs/exports.md) for the formats.
@@ -110,6 +112,7 @@ Exports include source, terms and timestamp provenance and never include the hom
 | `[area]` | `visible_radius_mi` (5), `collection_radius_nm` (10), `max_altitude_baro_ft` (initial filter preset) |
 | `[collector]` | `poll_interval_s` (10), `fast_interval_s` (2; 0 turns it off), `fast_hold_s` (60), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (false; keep gzipped raw responses) |
 | `[freshness]` | `fade_s` (20), `hide_s` (60), `trail_gap_s` (30), `trail_duration_s` (300) |
+| `[behavior]` | Circling, hovering and low-flight thresholds (see below) and `history_s` (900) |
 | `[storage]` | `data_dir` (`data`), `retention_days` (7; 0 keeps everything) |
 | `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off. `catalogs`: operator catalog files or folders (`catalogs`) |
 
@@ -149,6 +152,20 @@ Everything else is unidentified; nothing is guessed from aircraft type or flight
 | `type_note`, `source`, `checked` | Source required | |
 
 Pattern files have `pattern` (a case-insensitive regular expression), `operator`, `operator_short`, `role` and `source`. A pattern without an operator uses the owner's own name.
+
+## Behaviors
+
+Airspace infers three behaviors from positions alone. They describe the track, not the reason for it.
+
+| Behavior | Rule (defaults) | Applies to |
+| --- | --- | --- |
+| Circling | Net turn of 360° within 300 s, staying within 1,500 m of the window's center, faster than 20 kt. Orbits over the same spot up to 120 s apart are one episode; an orbit that moves on starts a new one. Turns count the largest one-way turn, so reversing doesn't cancel orbits | All aircraft |
+| Hovering | Airborne at 15 kt or less for 60 s, within 200 m | Helicopters |
+| Low | Barometric altitude at or below 300 ft for 20 s. That's above sea level, not above ground, so it suits the basin, not the hills | Helicopters |
+
+The map, list, hover card and detail panel show behaviors under way: a dashed ring at the episode's center and median radius, and text like "Circling 12 min · 25 turns · radius 142 m". Live detection looks back `history_s` (15 minutes), so longer episodes show as "15+ min"; replay uses the same window. The report lists every episode in a session, and `--geometry behaviors` exports them as GeoJSON points with the rules in the metadata.
+
+On the first overnight recording, this found LAPD orbits of 30–54 minutes at 140–250 m radius, and two helicopters hovering together at 1,800 ft, which is typical of news coverage. At 10-second polling, tight orbits are only a few points per turn, so fast polling matters here.
 
 ## Development
 

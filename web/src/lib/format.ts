@@ -1,6 +1,6 @@
 // Display formatting. Unknown stays unknown; zero is a real value.
 
-import type { Aircraft, AircraftClass, Role } from './types';
+import type { Aircraft, AircraftClass, Behavior, Role } from './types';
 
 export const METERS_PER_MILE = 1609.344;
 export const UNKNOWN = 'Unknown';
@@ -129,4 +129,25 @@ const ROLE_RULE_LABELS: Record<string, string> = {
 
 export function roleRule(rule: string): string {
   return ROLE_RULE_LABELS[rule] ?? rule;
+}
+
+function minutes(b: Behavior): string {
+  const m = Math.max(1, Math.round(b.duration_s / 60));
+  return `${m}${b.at_least ? '+' : ''} min`;
+}
+
+const BEHAVIOR_NAMES: Record<Behavior['kind'], string> = { circling: 'Circling', hovering: 'Hovering', low: 'Low' };
+
+/** Short chip text, e.g. "Circling 12 min". */
+export function behaviorChip(b: Behavior): string {
+  return `${BEHAVIOR_NAMES[b.kind]} ${minutes(b)}`;
+}
+
+/** Fuller description for the detail panel and hover card. */
+export function behaviorText(b: Behavior): string {
+  const parts = [behaviorChip(b)];
+  if (b.kind === 'circling' && b.turns !== null) parts.push(`${b.turns.toFixed(b.turns < 10 ? 1 : 0)} turns`);
+  if (b.kind !== 'low') parts.push(`radius ${Math.round(b.radius_m)} m`);
+  if (b.altitude_baro_ft !== null) parts.push(`around ${number.format(Math.round(b.altitude_baro_ft / 25) * 25)} ft`);
+  return parts.join(' · ');
 }

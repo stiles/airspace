@@ -8,6 +8,7 @@
     feet,
     identity,
     knots,
+    behaviorText,
     miles,
     operatorTag,
     roleLabel,
@@ -66,6 +67,15 @@
           {UNKNOWN} <span class="muted">(not in the catalog)</span>
         {/if}
       </dd>
+      {#if a.behaviors.length}
+        <dt>Behavior</dt>
+        <dd data-testid="behavior">
+          {#each a.behaviors as b (b.kind)}
+            <div>{behaviorText(b)}</div>
+          {/each}
+          <span class="muted">Inferred from the track, not the reason for it</span>
+        </dd>
+      {/if}
       {#if a.role && a.role_rule}
         <dt>Identified by</dt>
         <dd>

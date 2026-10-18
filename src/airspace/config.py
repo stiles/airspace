@@ -69,6 +69,29 @@ class Freshness(BaseModel):
     trail_duration_s: float = 300.0
 
 
+class Behavior(BaseModel):
+    """Thresholds for inferred behaviors (see behaviors.py). Defaults tuned on LA recordings."""
+
+    # Circling: a full net turn within the window, staying within the radius, faster than hovering
+    circle_window_s: float = Field(default=300.0, gt=0)
+    circle_max_radius_m: float = Field(default=1500.0, gt=0)
+    circle_min_speed_kt: float = Field(default=20.0, ge=0)
+    # Orbits over the same spot separated by up to this long are one episode
+    circle_merge_gap_s: float = Field(default=120.0, ge=0)
+    # Hovering (helicopters): at or below this ground speed for this long, within this drift
+    hover_max_speed_kt: float = Field(default=15.0, ge=0)
+    hover_min_s: float = Field(default=60.0, gt=0)
+    hover_max_drift_m: float = Field(default=200.0, gt=0)
+    # Low flight (helicopters): barometric altitude at or below this, for this long. LAPD orbits
+    # mostly at 400-800 ft; barometric altitude is above sea level, so hills need terrain (later)
+    low_altitude_ft: float = 300.0
+    low_min_s: float = Field(default=20.0, gt=0)
+    # An episode is current if it ends within this of the aircraft's latest position
+    ongoing_s: float = Field(default=30.0, ge=0)
+    # Position history kept per aircraft for live detection; longer episodes report this much
+    history_s: float = Field(default=900.0, gt=0)
+
+
 class Storage(BaseModel):
     data_dir: Path = Path("data")
     # Recorded polls and observations older than this are pruned hourly; 0 keeps everything
@@ -86,6 +109,7 @@ class Config(BaseModel):
     area: Area = Area()
     collector: Collector = Collector()
     freshness: Freshness = Freshness()
+    behavior: Behavior = Behavior()
     storage: Storage = Storage()
     enrich: Enrich = Enrich()
 

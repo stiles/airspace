@@ -89,7 +89,7 @@ class RegistryCache:
 def lookback(config: Config) -> timedelta:
     """History needed to rebuild trails, freshness and crossings at a moment."""
     f = config.freshness
-    return timedelta(seconds=max(f.trail_duration_s, f.hide_s) + f.trail_gap_s)
+    return timedelta(seconds=max(f.trail_duration_s, f.hide_s, config.behavior.history_s) + f.trail_gap_s)
 
 
 def replay_state(store: Store, session_id: int, at: datetime, config: Config, cache: RegistryCache | None = None) -> dict:

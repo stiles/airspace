@@ -38,6 +38,7 @@ export function aircraft(overrides: Partial<Aircraft> = {}): Aircraft {
     distance_m: 1500,
     bearing_deg: 45,
     inside_visible: true,
+    behaviors: [],
     trail: [
       [
         [-118.42, 34.0],

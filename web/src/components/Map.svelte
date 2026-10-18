@@ -2,7 +2,7 @@
   import mapboxgl, { type GeoJSONSource } from 'mapbox-gl';
   import 'mapbox-gl/dist/mapbox-gl.css';
   import { onDestroy, onMount, untrack } from 'svelte';
-  import { aircraftCollection, circle, rings, trailCollection } from '../lib/geo';
+  import { aircraftCollection, behaviorCollection, circle, rings, trailCollection } from '../lib/geo';
   import { drawIcon, ICON_NAMES, ICON_PIXEL_RATIO } from '../lib/icons';
   import { radarizeBasemap } from '../lib/basemap';
   import { FALLBACK_FONT, MAPBOX_STYLE, MAPBOX_TOKEN } from '../lib/config';
@@ -106,6 +106,7 @@
     const empty = { type: 'FeatureCollection' as const, features: [] };
     m.addSource('rings', { type: 'geojson', data: empty });
     m.addSource('trails', { type: 'geojson', data: empty, lineMetrics: true });
+    m.addSource('behaviors', { type: 'geojson', data: empty });
     m.addSource('aircraft', { type: 'geojson', data: empty, promoteId: 'id' });
 
     m.addLayer({
@@ -157,6 +158,19 @@
         'circle-stroke-color': SCOPE.halo,
         'circle-stroke-width': 2,
         'circle-emissive-strength': 1,
+      },
+    });
+    // Inferred orbits and hovers: a dashed ring, under trails and symbols
+    m.addLayer({
+      id: 'behaviors',
+      type: 'line',
+      source: 'behaviors',
+      paint: {
+        'line-color': ['case', ['get', 'selected'], SCOPE.accent, SCOPE.amber],
+        'line-width': 1.25,
+        'line-dasharray': [1.5, 2],
+        'line-opacity': 0.75,
+        'line-emissive-strength': 1,
       },
     });
     // line-gradient can't vary by feature, so each trail color gets its own layer
@@ -302,6 +316,7 @@
     if (!ready) return;
     source('aircraft')?.setData(aircraftCollection(aircraft, selectedId));
     source('trails')?.setData(trailCollection(aircraft, selectedId));
+    source('behaviors')?.setData(behaviorCollection(aircraft, selectedId));
   });
 </script>
 
@@ -375,7 +390,9 @@
     display: flex;
     flex-direction: column;
     gap: 1px;
-    max-width: 210px;
+    /* Without this, a card flipped left shrinks to the space between the aircraft and the edge */
+    width: max-content;
+    max-width: 230px;
     padding: 6px 9px;
     border: 1px solid var(--control-line);
     border-left: 2px solid var(--phosphor);

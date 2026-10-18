@@ -9,7 +9,7 @@ from helpers import ErrorKind, at, obs, poll
 
 
 def scenario():
-    """Helicopter crossing the boundary, a jet that drops out, an outage and a cached position."""
+    """Helicopter crossing the boundary, a jet that drops out, an outage, a cached position and an orbit."""
     polls = []
     for i in range(40):
         t = at(10 * i)
@@ -20,6 +20,9 @@ def scenario():
         if i < 10:
             observations.append(obs(t, "jet", miles=4, bearing=90, category="A3"))
         observations.append(obs(t, "parked", miles=3, bearing=180, age=30 + 10 * i, on_ground=True))
+        # Orbits home at about 250 m, one turn every 100 s, so replay must agree on behaviors too
+        observations.append(obs(t, "orbiter", miles=0.155, bearing=(36 * i) % 360, category="A7",
+                                ground_speed_kt=30.0, altitude_baro_ft=600))
         polls.append(poll(t, observations))
     return polls
 
@@ -27,7 +30,7 @@ def scenario():
 def fingerprint(snapshot):
     return {
         "aircraft": {
-            a["id"]: (a["freshness"], round(a["position_age_s"] or -1, 6), a["inside_visible"], a["trail"])
+            a["id"]: (a["freshness"], round(a["position_age_s"] or -1, 6), a["inside_visible"], a["trail"], a["behaviors"])
             for a in snapshot["aircraft"]
         },
         "last_seen": sorted(a["id"] for a in snapshot["last_seen"]),

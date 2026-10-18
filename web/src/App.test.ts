@@ -446,3 +446,39 @@ describe('Operators', () => {
     expect(screen.getByTestId('operator')).toHaveTextContent('Unknown (not in the catalog)');
   });
 });
+
+describe('Behaviors', () => {
+  const circling = aircraft({
+    behaviors: [{
+      kind: 'circling', since: '2026-10-17T19:48:00.000+00:00', duration_s: 724, at_least: false,
+      center: [-118.41, 34.01], radius_m: 161.4, turns: 12.3, altitude_baro_ft: 437,
+    }],
+  });
+  const hovering = aircraft({
+    id: 'ab4ea1', registration: 'N828AP', callsign: 'N828AP', distance_m: 4000,
+    behaviors: [{
+      kind: 'hovering', since: '2026-10-17T19:30:00.000+00:00', duration_s: 900, at_least: true,
+      center: [-118.39, 34.02], radius_m: 29, turns: null, altitude_baro_ft: 1800,
+    }],
+  });
+
+  it('shows chips, detail, hover lines and rings for current behaviors', async () => {
+    render(App, { fetchFn: server([snapshot({ aircraft: [circling, hovering] })]), pollMs: POLL });
+    await advance(0);
+    const chips = screen.getAllByTestId('behavior-chip').map((c) => c.textContent);
+    expect(chips).toEqual(['Circling 12 min', 'Hovering 15+ min']);
+
+    const rings = map().getSource('behaviors')!.setData.mock.calls.at(-1)![0].features;
+    expect(rings.map((f: { properties: { kind: string } }) => f.properties.kind)).toEqual(['circling', 'hovering']);
+    expect(rings[0].geometry.coordinates).toHaveLength(65);
+
+    await fireEvent.click(screen.getByRole('button', { name: /N225LA/ }));
+    expect(screen.getByTestId('behavior')).toHaveTextContent(
+      'Circling 12 min · 12 turns · radius 161 m · around 425 ft Inferred from the track, not the reason for it',
+    );
+
+    map().fire('mousemove:aircraft', { features: [{ properties: { id: 'ab4ea1' } }] });
+    await tick();
+    expect(screen.getByTestId('map-tooltip')).toHaveTextContent('Hovering 15+ min · radius 29 m · around 1,800 ft');
+  });
+});

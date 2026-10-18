@@ -7,6 +7,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from airspace import behaviors as bh
 from airspace import classify as cls
 from airspace.catalog import Catalog, Operator
 from airspace.config import Config
@@ -95,6 +96,7 @@ def build(
         "positions": _positions(airborne_rows, config),
         "aircraft": _aircraft(rows, airborne_rows, classes),
         "operators": _operator_counts(airborne_rows),
+        "behaviors": _behaviors(airborne_rows, config),
         "catalog": catalog is not None and len(catalog) > 0,
         "rotorcraft": _rotorcraft(airborne_rows, config, sleeps),
         "null_rates": {
@@ -222,6 +224,40 @@ def _operators(rows, classes, registry, catalog: Catalog | None) -> dict[str, Op
         )  # fmt: skip
         for aid in ids
     }
+
+
+def _behaviors(rows: list[dict], config: Config) -> list[dict]:
+    """Circling, hovering and low-flight episodes over the session, longest first."""
+    home = config.home
+    out = []
+    for aid, obs in _by_aircraft(rows).items():
+        points = [
+            bh.Point(r["position_at"], r["latitude"], r["longitude"], r["altitude_baro_ft"], r["ground_speed_kt"],
+                     None if r["on_ground"] is None else bool(r["on_ground"]))
+            for r in obs if r["new_position"] and r["position_at"] is not None
+        ]  # fmt: skip
+        kind = obs[0]["class"].kind
+        last = obs[-1]
+        op = last.get("operator")
+        for e in bh.detect(points, config.behavior, gap_s=config.freshness.trail_gap_s,
+                           rotorcraft=kind in (cls.ROTORCRAFT, cls.GYROPLANE)):  # fmt: skip
+            out.append(
+                {
+                    "aircraft_id": aid,
+                    "registration": last["registration"],
+                    "operator": (op.short or op.name or op.role) if op else None,
+                    "class": kind,
+                    "kind": e.kind,
+                    "start": e.start,
+                    "end": e.end,
+                    "duration_s": e.duration_s,
+                    "turns": e.turns,
+                    "radius_m": e.radius_m,
+                    "altitude_baro_ft": e.altitude_baro_ft,
+                    "distance_mi": distance_m(home.latitude, home.longitude, e.latitude, e.longitude) / METERS_PER_MILE,
+                }
+            )
+    return sorted(out, key=lambda b: -b["duration_s"])
 
 
 def _operator_counts(airborne_rows: list[dict]) -> dict:
@@ -501,6 +537,33 @@ def render(report: dict, config: Config) -> str:
             )
     else:
         lines.append("None observed.")
+
+    beh = report["behaviors"]
+    lines += ["", "## Behaviors", ""]
+    if beh:
+        by_kind = Counter(b["kind"] for b in beh)
+        minutes = defaultdict(float)
+        for b in beh:
+            minutes[b["kind"]] += b["duration_s"] / 60
+        lines.append(
+            "Inferred from positions; they describe the track, not the reason. "
+            + "; ".join(f"{k}: {by_kind[k]} episodes, {minutes[k]:.0f} min" for k in sorted(by_kind))
+        )
+        lines += [
+            "",
+            "| Behavior | Registration | Operator | Start (UTC) | Duration | Turns | Radius | Altitude | From home |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for b in beh[:30]:
+            lines.append(
+                f"| {b['kind']} | {b['registration'] or b['aircraft_id']} | {b['operator'] or ''} | {_fmt_time(b['start'])} "
+                f"| {b['duration_s'] / 60:.1f} min | {_fmt(b['turns'], '.1f')} | {b['radius_m']:.0f} m "
+                f"| {_fmt(b['altitude_baro_ft'], '.0f', ' ft')} | {b['distance_mi']:.1f} mi |"
+            )
+        if len(beh) > 30:
+            lines.append(f"\n{len(beh) - 30} shorter episodes not shown.")
+    else:
+        lines.append("None detected.")
 
     gaps = report["gaps"]
     lines += [

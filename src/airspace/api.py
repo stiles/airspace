@@ -278,7 +278,7 @@ def create_app(
     def export(
         session_id: int,
         format: str = Query("geojson", pattern="^(geojson|json)$"),
-        geometry: str = Query("tracks", pattern="^(tracks|points)$"),
+        geometry: str = Query("tracks", pattern="^(tracks|points|behaviors)$"),
         start: str | None = None,
         end: str | None = None,
         aircraft: str | None = Query(None, description="Comma-separated aircraft IDs"),

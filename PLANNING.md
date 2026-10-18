@@ -2,7 +2,7 @@
 
 The original technical plan (prepared October 17, 2026, as SPEC.md), with the decisions made while building each milestone and notes on how the pieces work. The [README](README.md) covers installing and using the tool.
 
-**Status:** milestones 1–4 are built. Milestone 5's soak test passed, and retention, memory tracking and a bounded registry cache were added for continuous operation (see [5. Decide on continuous operation](#5-decide-on-continuous-operation)). On the [roadmap](#roadmap), milestone 6 (operator and role catalog) is built; next is behavior detection.
+**Status:** milestones 1–4 are built. Milestone 5's soak test passed, and retention, memory tracking and a bounded registry cache were added for continuous operation (see [5. Decide on continuous operation](#5-decide-on-continuous-operation)). On the [roadmap](#roadmap), milestones 6 (operator and role catalog) and 7 (behavior detection) are built, along with adaptive polling; next is the event log and alerts.
 
 ## Objective
 
@@ -311,6 +311,17 @@ Built October 18, 2026. Decisions made during implementation:
 - **Repeated passes:** the same aircraft crossing one spot several times, which is useful for fire coverage.
 - Thresholds go in config with defaults tuned on the existing recordings, which include LAPD, LAFD and news helicopters. Tests use recorded tracks plus synthetic orbits, and check the false positives produced by wind-corrected straight lines and by approach patterns.
 - All of these are inferred behaviors and must be labeled that way. "Circling" describes the track; it is not a claim about why the aircraft was there.
+
+Built October 18, 2026, and tuned on session 4 (10-second polls). Decisions made during implementation:
+
+- `behaviors.py` projects each segment to local meters and detects episodes; live state, replay, the report and the behaviors export all call it. Segments split by the trail-break rule, which moved to `geometry.py`.
+- Circling uses positional headings between points at least 15 m apart (reported track is unreliable when slow) and a cumulative signed turn. For each start point it takes the first window reaching 360° with at least six positions, within the radius and above the speed floor; a straight leg stops the search once it's more than twice the radius from the start. Windows over the same spot (center within half the radius of the previous window's) and up to 120 s apart merge; remnants under one turn are dropped. Turns are the largest one-way turn in the episode.
+- Tuning: the first pass merged orbits over different spots (one 4 km "orbit"), so merging checks centers. Comparing with the first window's center split long orbits whose first window included the inbound leg; comparing with the previous window's center follows slow drift. Requiring six points per window dropped sparse tight orbits, so the window now extends to six points instead. After that, N225LA's orbit is one 54-minute episode (82 turns, 161 m) instead of ten pieces. A drifting orbit still reports its median radius over the whole episode (N955LA: 2 km over 11 minutes); revisit with 2-second data.
+- Low flight at 500 ft flagged LAPD's normal orbit altitude (most helicopter positions were 400–800 ft barometric), so the default is 300 ft. Terrain is still open.
+- Hovering found N828AP and N93DD hovering together at 1,800 ft for five minutes, consistent with news coverage.
+- Live detection reruns only when a track gains a position. Tracks keep `history_s` (900 s) of positions, and replay loads the same window, so replay matches live (the replay test now includes an orbit). An episode reaching back to the start of a full window is flagged `at_least` and shown as "15+ min".
+- Detection over all 716 tracks of session 4 (109,000 positions) takes 0.1 s.
+- Repeated passes over one spot are deferred to milestone 11, where fire coverage needs them.
 
 **Milestone 8: event log and alerts.** Behaviors become events: "LAPD Air Support, circling 0.8 mi NE, 6 min, 600 ft." Events show in a dashboard feed and on the replay timeline, are stored with their sessions and can trigger optional notifications (macOS notifications first; a webhook such as ntfy later). Add per-role and per-distance alert rules and a quiet period, so one long orbit produces one alert.
 
