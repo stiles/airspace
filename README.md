@@ -68,6 +68,8 @@ caffeinate -i uv run airspace collect --duration 8h
 
 Closing the lid still sleeps most MacBooks; `caffeinate -s` also blocks system sleep, but only on AC power.
 
+For an always-on setup, [docs/pi-setup.md](docs/pi-setup.md) covers installing Airspace on a Raspberry Pi 5 and showing the dashboard on a connected monitor.
+
 ### Dashboard
 
 - **Map:** the side list sorts aircraft by distance. Click an aircraft on the map or in the list for details: identity, type, altitude, speed, vertical rate, position source and age. Labels show altitude in hundreds of feet (`015` is 1,500 ft barometric).
@@ -187,6 +189,7 @@ src/airspace/      Python package: providers/, collector, state, storage, replay
 web/src/           Svelte 5 dashboard: components/, lib/ (API client, geometry, theme, replay)
 tests/             pytest suite and a captured adsb.fi fixture
 docs/exports.md    Export formats
+docs/pi-setup.md   Raspberry Pi 5 setup
 PLANNING.md        Original plan, milestone decisions and implementation notes
 ```
 
