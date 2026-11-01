@@ -220,7 +220,7 @@ Stop it (Ctrl-C in its terminal, or kill ${holder:-<pid>}) and rerun the install
 
   say "Waiting for $health_url"
   for _ in $(seq 1 45); do
-    if curl -fsS -o /dev/null --max-time 2 "$health_url"; then
+    if curl -fs -o /dev/null --max-time 2 "$health_url"; then
       say "Backend is responding"
       return 0
     fi
