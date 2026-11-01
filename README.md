@@ -68,7 +68,7 @@ caffeinate -i uv run airspace collect --duration 8h
 
 Closing the lid still sleeps most MacBooks; `caffeinate -s` also blocks system sleep, but only on AC power.
 
-For an always-on setup, [docs/pi-setup.md](docs/pi-setup.md) covers installing Airspace on a Raspberry Pi 5 and showing the dashboard on a connected monitor.
+For an always-on setup, [docs/pi-setup.md](docs/pi-setup.md) covers installing Airspace on a Raspberry Pi 5 and showing the dashboard on a connected monitor. [docs/raspberry-pi-kiosk.md](docs/raspberry-pi-kiosk.md) then makes the Pi start the backend and a full-screen dashboard on its own at boot (`./scripts/install-pi-kiosk.sh`).
 
 ### Dashboard
 
@@ -190,6 +190,8 @@ web/src/           Svelte 5 dashboard: components/, lib/ (API client, geometry, 
 tests/             pytest suite and a captured adsb.fi fixture
 docs/exports.md    Export formats
 docs/pi-setup.md   Raspberry Pi 5 setup
+docs/raspberry-pi-kiosk.md   Raspberry Pi kiosk: systemd service, Chromium autostart, updates
+scripts/, deploy/  Pi installer, update script, kiosk launcher and systemd unit template
 PLANNING.md        Original plan, milestone decisions and implementation notes
 ```
 

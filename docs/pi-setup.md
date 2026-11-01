@@ -192,13 +192,9 @@ Check the socket name with `ls /run/user/$(id -u)/`. For the permanent setup, st
 
 **Status at the end of this session:** the frontend build succeeded and Chromium showed a keyring prompt. Successful dashboard rendering after dismissing the prompt was **not yet confirmed**.
 
-## 11. Next steps (not completed yet)
+## 11. Next steps
 
-- Confirm that the dashboard renders and updates on the HDMI monitor.
-- Create a `systemd` service for `uv run airspace serve`, with the repository as its working directory and automatic restart on failure.
-- Configure Chromium kiosk autostart **inside the graphical user session** by adding the launch command, with `--password-store=basic --no-first-run --kiosk`, to `~/.config/labwc/autostart`.
-- Disable display blanking/screen sleep and configure desktop autologin if appropriate for the physical environment.
-- Test a full reboot with no SSH interaction: backend starts, monitor displays Airspace and aircraft positions update.
+- Make the Pi start Airspace on its own: [raspberry-pi-kiosk.md](raspberry-pi-kiosk.md) installs a systemd service for the backend, Chromium kiosk autostart in the desktop session, desktop autologin and no screen blanking with `./scripts/install-pi-kiosk.sh`.
 - Optionally reserve the Pi's IP in the router, switch to SSH keys and monitor microSD write endurance.
 
 ## Useful commands
@@ -207,12 +203,11 @@ Check the socket name with `ls /run/user/$(id -u)/`. For the permanent setup, st
 # Connect
 ssh canterlot@raspberrypi.local
 
-# Run Airspace manually
+# Run Airspace manually (with the kiosk setup, run `sudo systemctl stop airspace` first)
 cd ~/github/airspace && uv run airspace serve
 
-# Rebuild frontend after pulling updates
-cd ~/github/airspace && git pull
-cd web && npm install && npm run build
+# Pull, rebuild and restart (after installing the kiosk setup)
+cd ~/github/airspace && ./scripts/update-pi.sh
 
 # Test API on Pi
 curl -s http://127.0.0.1:8000/api/health

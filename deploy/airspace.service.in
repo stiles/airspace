@@ -1,0 +1,41 @@
+# Rendered by scripts/install-pi-kiosk.sh. Edit deploy/airspace.service.in and rerun the
+# installer rather than editing the installed copy.
+[Unit]
+Description=Airspace collector and dashboard on http://127.0.0.1:@PORT@
+Documentation=https://github.com/stiles/airspace/blob/main/docs/raspberry-pi-kiosk.md
+Wants=network-online.target
+After=network-online.target time-sync.target
+# Keep retrying (with the backoff below) rather than giving up after a burst of failures
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+User=@USER@
+Group=@GROUP@
+WorkingDirectory=@DIR@
+Environment=AIRSPACE_CONFIG=@DIR@/airspace.toml
+Environment=PYTHONUNBUFFERED=1
+# `serve` binds 127.0.0.1 only and runs a single worker, so there is one collector. The kiosk
+# polls every 2 seconds, so request logging is off to spare the SD card.
+ExecStart=@DIR@/.venv/bin/airspace serve --port @PORT@ --no-access-log
+
+# uvicorn runs the lifespan shutdown on SIGTERM: the session is closed, SQLite is closed and
+# the collector lock is released
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=30
+
+Restart=on-failure
+RestartSec=5s
+RestartSteps=6
+RestartMaxDelaySec=2min
+# Exit status 2 means airspace.toml is missing or invalid; retrying won't fix it
+RestartPreventExitStatus=2
+
+SyslogIdentifier=airspace
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
