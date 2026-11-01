@@ -45,13 +45,13 @@ echo "== Building the dashboard"
 echo "== Restarting $service"
 sudo systemctl restart "$service"
 for _ in $(seq 1 45); do
-  if curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:$port/api/health"; then
+  if curl -fs -o /dev/null --max-time 2 "http://127.0.0.1:$port/api/health"; then
     echo "Backend is responding"
     break
   fi
   sleep 2
 done
-if ! curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:$port/api/health"; then
+if ! curl -fs -o /dev/null --max-time 2 "http://127.0.0.1:$port/api/health"; then
   journalctl -u "$service" -n 30 --no-pager >&2 || true
   echo "Error: the backend didn't come back; see journalctl -u $service" >&2
   exit 1
