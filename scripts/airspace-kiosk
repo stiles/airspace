@@ -1,0 +1,251 @@
+#!/usr/bin/env bash
+# Shows the Airspace dashboard in a full-screen Chromium window and relaunches it when it exits.
+#
+#   airspace-kiosk run       Supervise Chromium in the current graphical session (desktop autostart)
+#   airspace-kiosk start     Start the supervisor in the Pi's desktop session, e.g. from SSH
+#   airspace-kiosk restart   Close Chromium so the supervisor reopens it (reloads the dashboard)
+#   airspace-kiosk stop      Stop the supervisor and Chromium
+#   airspace-kiosk status    Show the supervisor, Chromium and backend state
+#   airspace-kiosk print-command   Print the Chromium command line
+#
+# Options: --port N (default 8000) or --url URL. Environment: AIRSPACE_PORT, AIRSPACE_KIOSK_URL.
+
+set -euo pipefail
+
+port=${AIRSPACE_PORT:-8000}
+url=${AIRSPACE_KIOSK_URL:-}
+cmd=${1:-run}
+[ $# -gt 0 ] && shift
+while [ $# -gt 0 ]; do
+  case $1 in
+    --port) port=$2; shift 2 ;;
+    --url) url=$2; shift 2 ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "airspace-kiosk: unknown option $1" >&2; exit 64 ;;
+  esac
+done
+url=${url:-http://127.0.0.1:$port}
+health_url=${url%/}/api/health
+
+uid=$(id -u)
+runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$uid}
+state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/airspace-kiosk
+profile=$state_dir/chromium
+lock_file=$runtime_dir/airspace-kiosk.lock
+pid_file=$runtime_dir/airspace-kiosk.pid
+
+log() {
+  echo "airspace-kiosk: $*" >&2
+  logger -t airspace-kiosk -- "$*" 2>/dev/null || true
+}
+
+chromium_bin() {
+  command -v chromium || command -v chromium-browser || echo chromium
+}
+
+chromium_args() {
+  printf '%s\n' \
+    --kiosk \
+    --password-store=basic \
+    --no-first-run \
+    --noerrdialogs \
+    --hide-crash-restore-bubble \
+    --disable-features=Translate \
+    --check-for-update-interval=31536000 \
+    --ozone-platform-hint=auto \
+    "--user-data-dir=$profile" \
+    "$url"
+}
+
+chromium_pids() {
+  pgrep -u "$uid" -f -- "--user-data-dir=$profile" 2>/dev/null || true
+}
+
+supervisor_pid() {
+  local pid
+  pid=$(cat "$pid_file" 2>/dev/null) || return 1
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && echo "$pid"
+}
+
+backend_up() {
+  curl -fsS -o /dev/null --max-time 3 "$health_url" 2>/dev/null
+}
+
+# Points this process at the Pi's desktop session. Over SSH, DISPLAY may be a forwarded X11
+# display on another machine, so inherited values are ignored.
+use_desktop_session() {
+  unset DISPLAY WAYLAND_DISPLAY
+  export XDG_RUNTIME_DIR=$runtime_dir
+  local sock
+  for sock in "$runtime_dir"/wayland-[0-9]*; do
+    case $sock in *.lock) continue ;; esac
+    if [ -S "$sock" ]; then
+      export WAYLAND_DISPLAY=${sock##*/}
+      break
+    fi
+  done
+  if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
+    export DISPLAY=:0
+  fi
+  if [ -S "$runtime_dir/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS=unix:path=$runtime_dir/bus
+  fi
+  if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; then
+    log "no desktop session found for $(id -un); is the Pi logged in to the desktop?"
+    exit 1
+  fi
+}
+
+session_alive() {
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    case $WAYLAND_DISPLAY in
+      /*) [ -S "$WAYLAND_DISPLAY" ] ;;
+      *) [ -S "$runtime_dir/$WAYLAND_DISPLAY" ] ;;
+    esac
+  elif [ -n "${DISPLAY:-}" ]; then
+    local n=${DISPLAY#*:}
+    n=${n%%.*}
+    [ -S "/tmp/.X11-unix/X$n" ]
+  else
+    return 1
+  fi
+}
+
+# Marks the last exit as clean so Chromium doesn't offer to restore the previous session
+mark_clean_exit() {
+  local prefs=$profile/Default/Preferences
+  [ -f "$prefs" ] || return 0
+  sed -i \
+    -e 's/"exited_cleanly":false/"exited_cleanly":true/' \
+    -e 's/"exit_type":"[^"]*"/"exit_type":"Normal"/' \
+    "$prefs" || true
+}
+
+wait_for_backend() {
+  local waited=0
+  until backend_up; do
+    if [ $((waited % 60)) -eq 0 ]; then
+      log "waiting for the backend at $health_url"
+    fi
+    session_alive || return 1
+    sleep 2
+    waited=$((waited + 2))
+  done
+}
+
+keep_display_awake() {
+  # X11 only; Wayland compositors are configured by the installer (raspi-config)
+  if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -n "${DISPLAY:-}" ] && command -v xset >/dev/null; then
+    xset s off -dpms s noblank 2>/dev/null || true
+  fi
+  if pgrep -u "$uid" -x swayidle >/dev/null 2>&1; then
+    log "swayidle is running and may blank the screen; see docs/raspberry-pi-kiosk.md"
+  fi
+}
+
+run() {
+  mkdir -p "$state_dir" "$runtime_dir"
+  exec 9>"$lock_file"
+  if ! flock -n 9; then
+    log "another kiosk supervisor is running"
+    exit 0
+  fi
+  echo $$ >"$pid_file"
+
+  local child=""
+  trap '[ -n "$child" ] && kill "$child" 2>/dev/null; rm -f "$pid_file"; exit 0' TERM INT HUP
+
+  session_alive || use_desktop_session
+  log "session: WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-} DISPLAY=${DISPLAY:-}"
+  keep_display_awake
+
+  local delay=2 started bin a
+  local -a args
+  bin=$(chromium_bin)
+  while session_alive; do
+    local existing
+    existing=$(chromium_pids)
+    if [ -n "$existing" ]; then
+      # A Chromium left over from an earlier supervisor: wait for it instead of opening a second window
+      log "Chromium already running with the kiosk profile (pid $existing); waiting for it to exit"
+      while [ -n "$(chromium_pids)" ]; do sleep 5; done
+      continue
+    fi
+
+    wait_for_backend || break
+    mark_clean_exit
+    [ -f "$state_dir/chromium.log" ] && mv -f "$state_dir/chromium.log" "$state_dir/chromium.log.1"
+    started=$(date +%s)
+    log "launching $bin at $url"
+    args=()
+    while IFS= read -r a; do args+=("$a"); done < <(chromium_args)
+    "$bin" "${args[@]}" >"$state_dir/chromium.log" 2>&1 9>&- &
+    child=$!
+    local status=0
+    wait "$child" || status=$?
+    child=""
+
+    local ran=$(($(date +%s) - started))
+    [ "$ran" -ge 60 ] && delay=2
+    log "Chromium exited with status $status after ${ran}s; relaunching in ${delay}s"
+    sleep "$delay"
+    # Repeated quick crashes back off to one attempt a minute
+    [ "$ran" -lt 60 ] && delay=$((delay * 2 > 60 ? 60 : delay * 2))
+  done
+  log "desktop session ended; stopping"
+  rm -f "$pid_file"
+}
+
+start() {
+  if pid=$(supervisor_pid); then
+    echo "Kiosk supervisor already running (pid $pid)"
+    return 0
+  fi
+  use_desktop_session
+  mkdir -p "$state_dir"
+  setsid "$0" run --url "$url" >>"$state_dir/supervisor.log" 2>&1 </dev/null &
+  echo "Started kiosk supervisor on ${WAYLAND_DISPLAY:-$DISPLAY}; logs: journalctl -t airspace-kiosk"
+}
+
+stop() {
+  local pid
+  if pid=$(supervisor_pid); then
+    kill "$pid"
+    echo "Stopped kiosk supervisor (pid $pid)"
+  fi
+  if [ -n "$(chromium_pids)" ]; then
+    pkill -u "$uid" -f -- "--user-data-dir=$profile" || true
+    echo "Closed kiosk Chromium"
+  fi
+}
+
+restart() {
+  if [ -n "$(chromium_pids)" ]; then
+    pkill -u "$uid" -f -- "--user-data-dir=$profile" || true
+    echo "Closed kiosk Chromium"
+  fi
+  if supervisor_pid >/dev/null; then
+    echo "The supervisor reopens it once the backend responds"
+  else
+    start
+  fi
+}
+
+status() {
+  local pid
+  if pid=$(supervisor_pid); then echo "supervisor: running (pid $pid)"; else echo "supervisor: not running"; fi
+  pid=$(chromium_pids | tr '\n' ' ')
+  echo "chromium:   ${pid:+running (pid ${pid% })}${pid:-not running}"
+  if backend_up; then echo "backend:    responding at $health_url"; else echo "backend:    not responding at $health_url"; fi
+}
+
+case $cmd in
+  run) run ;;
+  start) start ;;
+  stop) stop ;;
+  restart) restart ;;
+  status) status ;;
+  print-command) printf '%s' "$(chromium_bin)"; chromium_args | while IFS= read -r a; do printf ' %s' "$a"; done; echo ;;
+  -h|--help|help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "airspace-kiosk: unknown command $cmd" >&2; exit 64 ;;
+esac

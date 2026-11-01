@@ -207,7 +207,7 @@ def _url_time(value) -> str:
 PortOption = Annotated[int, typer.Option(help="Port on 127.0.0.1")]
 
 
-def _serve(config: cfg.Config, mode: str, port: int) -> None:
+def _serve(config: cfg.Config, mode: str, port: int, access_log: bool = True) -> None:
     import uvicorn
 
     from airspace.api import create_app, frontend_problem
@@ -215,11 +215,19 @@ def _serve(config: cfg.Config, mode: str, port: int) -> None:
     if problem := frontend_problem():
         typer.echo(f"Warning: {problem}", err=True)
     # One worker and no auto-reload, so a second collector can never start
-    uvicorn.run(create_app(config, mode=mode), host="127.0.0.1", port=port, workers=1, reload=False)
+    uvicorn.run(
+        create_app(config, mode=mode), host="127.0.0.1", port=port, workers=1, reload=False, access_log=access_log
+    )
 
 
 @app.command()
-def serve(config_file: ConfigOption = None, port: PortOption = 8000) -> None:
+def serve(
+    config_file: ConfigOption = None,
+    port: PortOption = 8000,
+    access_log: Annotated[
+        bool, typer.Option(help="Log every HTTP request (the dashboard polls every 2 seconds)")
+    ] = True,
+) -> None:
     """Run the collector and local API/dashboard together."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -229,7 +237,7 @@ def serve(config_file: ConfigOption = None, port: PortOption = 8000) -> None:
     typer.echo(f"Catalog: {len(catalog)} aircraft, {len(catalog.patterns)} owner patterns.")
     try:
         with CollectorLock(config.storage.data_dir):
-            _serve(config, "live", port)
+            _serve(config, "live", port, access_log)
     except CollectorLocked as exc:
         typer.echo(f"{exc}. Stop it first, or use `airspace replay` to browse recordings.", err=True)
         raise typer.Exit(1) from None
