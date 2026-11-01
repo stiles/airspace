@@ -7,7 +7,8 @@
 #
 # Environment: AIRSPACE_DIR, AIRSPACE_SERVICE [airspace], AIRSPACE_PORT [8000]
 
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "Error: stopped at line $LINENO of $0 ($BASH_COMMAND)" >&2' ERR
 
 dir=${AIRSPACE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 service=${AIRSPACE_SERVICE:-airspace}

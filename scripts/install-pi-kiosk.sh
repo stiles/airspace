@@ -20,7 +20,8 @@
 #
 # Never writes airspace.toml, web/.env.local or data/.
 
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "Error: stopped at line $LINENO of $0 ($BASH_COMMAND)" >&2' ERR
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 dir=${AIRSPACE_DIR:-$repo}
@@ -168,7 +169,7 @@ detect_desktop() {
   fi
   local configured
   configured=$(grep -hsE '^[[:space:]]*(autologin-session|user-session)[[:space:]]*=' \
-    /etc/lightdm/lightdm.conf /etc/lightdm/lightdm.conf.d/*.conf 2>/dev/null | tail -n 1 | cut -d= -f2 | tr -d ' ')
+    /etc/lightdm/lightdm.conf /etc/lightdm/lightdm.conf.d/*.conf 2>/dev/null | tail -n 1 | cut -d= -f2 | tr -d ' ' || true)
   if [ "$compositor" = unknown ]; then
     case $configured in
       *labwc*) compositor=labwc ;;
