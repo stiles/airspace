@@ -15,3 +15,5 @@ node_modules/
 *.local
 # Env templates were edited with real values once; document variables in the README instead
 .env.example
+
+drafts/
