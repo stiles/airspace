@@ -274,7 +274,7 @@ Decision: the adsb.fi API is sufficient for continuous personal use. Freshness d
 - The FAA registry cache is least-recently-used, capped at 5,000 aircraft.
 - The collector records its memory footprint hourly (`process_stats` table), the report shows first, last, peak and growth per hour, and `/api/health` includes current memory.
 
-Open: where it runs. A laptop under `caffeinate` works for sessions; continuous operation wants an always-on machine (a Mac mini or Raspberry Pi) under `launchd` or `systemd`. The next long run should check the hourly memory trend.
+Where it runs: a laptop under `caffeinate` works for sessions; continuous operation runs on a Raspberry Pi 5 under `systemd`, with a full-screen dashboard on a connected monitor (see [docs/pi-setup.md](docs/pi-setup.md) and [docs/raspberry-pi-kiosk.md](docs/raspberry-pi-kiosk.md)). The next long run should check the hourly memory trend.
 
 ## Roadmap
 
@@ -406,5 +406,3 @@ Documentation checked October 17, 2026. Provider policies and interfaces can cha
 4. [readsb JSON format](https://github.com/wiedehopf/readsb/blob/dev/README-json.md)
 5. [FlightTracer repository](https://github.com/stiles/flight-tracer)
 6. [The Flight Wall FAQ](https://theflightwall.com/pages/faq)
-
-The next engineering task is milestone 1: a headless collector, real response fixtures and a coverage report. That establishes whether the chosen feed supports the neighborhood display before frontend work begins.
