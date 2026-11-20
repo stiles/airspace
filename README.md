@@ -80,7 +80,7 @@ For an always-on setup, [docs/pi-setup.md](docs/pi-setup.md) covers installing A
 - **Replay:** use the Live/Replay switch. The timeline shows each poll (green succeeded, red failed, hatched while asleep) with an amber strip when a helicopter was in the feed. Drag to seek; space plays and pauses, ← and → step by poll, and the speed runs from 1× to 60×. The URL keeps `?session=&at=`, so any moment can be bookmarked.
 
 - **Weather:** the card at the top right shows the latest observation from the station in `[weather]`, its time and how old it is. Stations report about hourly; past two hours the card dims and says the station isn't reporting. It's live only and isn't recorded, so replay doesn't show it.
-- **Home view:** the map frames `map.view_radius_mi` around home, or the visible area when that's unset, and refits when the window changes size until you pan or zoom. Recenter returns to it.
+- **Home view:** the map frames `display.view_radius_mi` around home, or the visible area when that's unset, and refits when the window changes size until you pan or zoom. Recenter returns to it.
 
 To use a different Mapbox style, add `VITE_MAPBOX_STYLE=mapbox://styles/...` to `web/.env.local` and rebuild. Classic styles are recolored into the radar palette; Mapbox Standard styles keep their own colors.
 
@@ -104,7 +104,7 @@ Exports include source, terms and timestamp provenance and never include the hom
 | Endpoint | Returns |
 | --- | --- |
 | `GET /api/state` | Snapshot: aircraft by distance with freshness and trails, recently lost aircraft, entry/exit events, area, feed status and weather |
-| `GET /api/outlines` | Map outlines from `map.outlines`, as one GeoJSON FeatureCollection |
+| `GET /api/outlines` | Map outlines (`show_la_boundary` and `outlines`), as one GeoJSON FeatureCollection |
 | `GET /api/aircraft/{id}` | One aircraft with owner/operator and recent positions |
 | `GET /api/health` | Collector status, feed status, a position-age summary and the process's memory |
 | `GET /api/sessions` | Recorded sessions |
@@ -125,7 +125,7 @@ Exports include source, terms and timestamp provenance and never include the hom
 | `[behavior]` | Circling, hovering and low-flight thresholds (see below) and `history_s` (900) |
 | `[storage]` | `data_dir` (`data`), `retention_days` (7; 0 keeps everything) |
 | `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off. `catalogs`: operator catalog files or folders (`catalogs`) |
-| `[map]` | `view_radius_mi` (unset: the visible radius plus 8%), `outlines` (GeoJSON files in lon/lat, e.g. `["boundaries/los-angeles.geojson"]`) |
+| `[display]` | `view_radius_mi` (unset: the visible radius plus 8%), `show_la_boundary` (false; draws the Los Angeles city limits), `outlines` (other GeoJSON files in lon/lat), `text_scale` (1; enlarges the header, side panel and weather card, e.g. 1.5 for a TV) |
 | `[weather]` | `enabled` (true), `station` (unset: the nearest NWS station to home, e.g. `KSMO`), `interval_s` (600) |
 
 Fast polling starts when an airborne helicopter, or a cataloged police, fire, medical or news aircraft, is inside the visible area with a position under `fade_s` old, and stays on for `fast_hold_s` after the last one. Set `fast_radius_mi` to trigger farther out, up to the collection radius. Replaying a night's recording, a 5-mile trigger polled fast 11% of the time (about 520 requests an hour); the full 11.5-mile collection area, 67% (about 1,320). adsb.fi allows one request per second, so `fast_interval_s` can't go below 1. Failures drop back to the normal interval and its backoff. Each poll records whether it was fast, and `airspace report` shows the share.
@@ -209,7 +209,7 @@ Backend tests cover adapter edge cases, geometry, collector failure handling wit
 
 ## Data and terms
 
-Aircraft data comes from [adsb.fi](https://adsb.fi), whose open data is for personal, noncommercial use and requires attribution, which the dashboard shows. Check the terms before any newsroom or commercial use. Weather comes from the [National Weather Service API](https://www.weather.gov/documentation/services-web-api) (US only, public domain), and the LA city limits from the Census Bureau's TIGERweb. Coverage depends on volunteer receivers; aircraft can be missing, late or misidentified, and an empty map is not proof of an empty sky.
+Aircraft data comes from [adsb.fi](https://adsb.fi), whose open data is for personal, noncommercial use and requires attribution, which the dashboard shows. Check the terms before any newsroom or commercial use. Weather comes from the [National Weather Service API](https://www.weather.gov/documentation/services-web-api) (US only, public domain), and the LA city limits from the city's Bureau of Engineering. Coverage depends on volunteer receivers; aircraft can be missing, late or misidentified, and an empty map is not proof of an empty sky.
 
 ## License
 

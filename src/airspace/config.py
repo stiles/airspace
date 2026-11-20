@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, model_validator
 from airspace.geometry import METERS_PER_MILE, METERS_PER_NM
 
 DEFAULT_PATH = Path("airspace.toml")
+LA_BOUNDARY = Path(__file__).resolve().parents[2] / "boundaries" / "los-angeles.geojson"
 
 # Approximate West LA point for fixtures and screenshots; not anyone's address
 DEMO_LATITUDE = 34.00
@@ -109,11 +110,20 @@ class Enrich(BaseModel):
     catalogs: list[Path] = [Path("catalogs")]
 
 
-class MapView(BaseModel):
+class Display(BaseModel):
     # Radius around home the map frames on load and resize; unset frames the visible area
     view_radius_mi: float | None = Field(default=None, gt=0)
-    # GeoJSON boundaries (lon/lat) drawn as faint outlines, e.g. city limits (see boundaries/)
+    # Draw the bundled Los Angeles city limits (boundaries/los-angeles.geojson)
+    show_la_boundary: bool = False
+    # Other GeoJSON boundaries (lon/lat) drawn as outlines
     outlines: list[Path] = []
+    # Enlarges the header, side panel and weather card (not the map), e.g. 1.5 for a TV
+    text_scale: float = Field(default=1.0, ge=0.75, le=3.0)
+
+    @property
+    def outline_paths(self) -> list[Path]:
+        bundled = [LA_BOUNDARY] if self.show_la_boundary else []
+        return bundled + [p for p in self.outlines if p.expanduser().resolve() != LA_BOUNDARY]
 
 
 class Weather(BaseModel):
@@ -133,7 +143,7 @@ class Config(BaseModel):
     behavior: Behavior = Behavior()
     storage: Storage = Storage()
     enrich: Enrich = Enrich()
-    map: MapView = MapView()
+    display: Display = Display()
     weather: Weather = Weather()
 
     @model_validator(mode="after")
@@ -160,7 +170,7 @@ class Config(BaseModel):
 
     @property
     def view_radius_m(self) -> float | None:
-        mi = self.map.view_radius_mi
+        mi = self.display.view_radius_mi
         return None if mi is None else mi * METERS_PER_MILE
 
     @property
@@ -228,11 +238,15 @@ hangarbay_db = "~/.hangarbay/data/publish/registry.duckdb"
 # Operator and role catalogs: CSV files or directories of them
 catalogs = ["catalogs"]
 
-[map]
+[display]
 # Frame this radius around home on load and resize; unset frames the visible area
 # view_radius_mi = 6.0
-# Faint outlines on the map, e.g. city limits (GeoJSON in lon/lat)
-# outlines = ["boundaries/los-angeles.geojson"]
+# Draw the Los Angeles city limits
+show_la_boundary = false
+# Other outlines on the map (GeoJSON in lon/lat)
+# outlines = ["path/to/boundary.geojson"]
+# Larger header, side panel and weather card, e.g. 1.5 for a TV across the room
+# text_scale = 1.0
 
 [weather]
 # Current conditions from the National Weather Service (US only)

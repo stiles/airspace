@@ -132,12 +132,11 @@ def test_weather_view_radius_and_outlines(config, fixture_bytes):
             return httpx.Response(200, json=station)
         return httpx.Response(200, content=observation)
 
-    boundary = Path(__file__).resolve().parents[1] / "boundaries" / "los-angeles.geojson"
     config = config.model_validate(
         {
             **config.model_dump(),
             "weather": {"enabled": True, "station": "KSMO"},
-            "map": {"view_radius_mi": 6, "outlines": [boundary]},
+            "display": {"view_radius_mi": 6, "show_la_boundary": True, "text_scale": 1.5},
         }
     )
     app = create_app(config, transport=httpx.MockTransport(handler), clock=fast_clock())
@@ -149,7 +148,7 @@ def test_weather_view_radius_and_outlines(config, fixture_bytes):
         assert weather["observation"]["temperature_f"] == 64
         assert weather["status"] in ("ok", "stale")  # depends on how old the fixture is
         assert client.get("/api/health").json()["weather"] == weather["status"]
-        assert round(state["area"]["view_radius_m"]) == 9656
+        assert round(state["area"]["view_radius_m"]) == 9656 and state["area"]["text_scale"] == 1.5
         outlines = client.get("/api/outlines").json()
         assert outlines["features"][0]["properties"]["name"] == "Los Angeles city limits"
 

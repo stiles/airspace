@@ -148,7 +148,7 @@ def create_app(
     """`mode` is 'live' (collector running) or 'replay' (recorded data only, no provider requests)."""
     if mode not in ("live", "replay"):
         raise ValueError(mode)
-    outlines = outlines_mod.load(config.map.outlines)
+    outlines = outlines_mod.load(config.display.outline_paths)
 
     class ReplayRegistry:
         """One registry cache for replay and export requests; lookups serialized (DuckDB isn't thread-safe)."""
@@ -200,7 +200,7 @@ def create_app(
 
     @app.get("/api/outlines")
     def outline_features() -> dict:
-        """Boundaries from `map.outlines`, as one GeoJSON FeatureCollection."""
+        """Boundaries from `display.show_la_boundary` and `display.outlines`, as one GeoJSON FeatureCollection."""
         return outlines
 
     @app.get("/api/aircraft/{aircraft_id}")

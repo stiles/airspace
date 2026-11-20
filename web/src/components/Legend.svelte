@@ -155,8 +155,8 @@
     border-top-style: dashed;
   }
   .line.outline {
-    border-top: 1.25px solid var(--outline);
-    opacity: 0.8;
+    border-top: 2px solid var(--outline);
+    box-shadow: 0 0 4px var(--outline);
   }
   .orbit {
     flex: none;

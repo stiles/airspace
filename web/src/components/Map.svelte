@@ -118,6 +118,20 @@
     m.addSource('behaviors', { type: 'geojson', data: empty });
     m.addSource('aircraft', { type: 'geojson', data: empty, promoteId: 'id' });
 
+    // A soft glow under a solid line, so it reads against the basemap's own boundary lines
+    m.addLayer({
+      id: 'outlines-glow',
+      type: 'line',
+      source: 'outlines',
+      layout: { 'line-join': 'round' },
+      paint: {
+        'line-color': SCOPE.outline,
+        'line-width': 7,
+        'line-blur': 5,
+        'line-opacity': 0.3,
+        'line-emissive-strength': 1,
+      },
+    });
     m.addLayer({
       id: 'outlines',
       type: 'line',
@@ -125,8 +139,8 @@
       layout: { 'line-join': 'round' },
       paint: {
         'line-color': SCOPE.outline,
-        'line-width': 1.25,
-        'line-opacity': 0.6,
+        'line-width': 2,
+        'line-opacity': 0.9,
         'line-emissive-strength': 1,
       },
     });

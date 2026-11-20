@@ -557,6 +557,13 @@ describe('Behaviors', () => {
       expect(screen.getByTestId('weather')).toHaveTextContent('station not reporting');
     });
 
+    it('applies the text scale from the config', async () => {
+      const base = snapshot();
+      render(App, { fetchFn: server([snapshot({ area: { ...base.area, text_scale: 1.5 } })]), pollMs: 60_000 });
+      await advance(0);
+      expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.5');
+    });
+
     it('leaves the card out when weather is off', async () => {
       render(App, { fetchFn: server([snapshot({ weather: null })]), pollMs: 60_000 });
       await advance(0);

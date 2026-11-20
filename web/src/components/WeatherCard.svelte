@@ -44,14 +44,15 @@
     top: 10px;
     right: 50px;
     z-index: 2;
-    min-width: 170px;
-    padding: 6px 10px 7px;
+    min-width: 210px;
+    padding: 8px 12px 9px;
     border: 1px solid var(--control-line);
     border-radius: 4px;
-    background: rgba(5, 12, 8, 0.88);
+    background: rgba(5, 12, 8, 0.9);
     color: var(--text-soft);
-    font-size: 12px;
+    font-size: 13px;
     font-variant-numeric: tabular-nums;
+    zoom: var(--ui-scale, 1);
   }
   header {
     display: flex;
@@ -74,17 +75,18 @@
   .temp {
     color: var(--text);
     font-family: var(--mono);
-    font-size: 22px;
+    font-size: 30px;
     font-weight: 500;
+    line-height: 1.1;
   }
   .desc {
     color: var(--text);
-    font-size: 13px;
+    font-size: 15px;
   }
   .age {
-    margin-top: 2px;
+    margin-top: 3px;
     color: var(--muted);
-    font-size: 11px;
+    font-size: 12px;
   }
   .stale .now,
   .stale .line {

@@ -72,6 +72,10 @@
   $effect(() => {
     document.title = title;
   });
+  const textScale = $derived(snapshot?.area.text_scale ?? 1);
+  $effect(() => {
+    document.documentElement.style.setProperty('--ui-scale', String(textScale));
+  });
   const sessionId = $derived(mode === 'live' ? (liveSnapshot?.session_id ?? null) : replay.sessionId);
   // Current conditions only; a replayed moment has no weather
   const weather = $derived(mode === 'live' ? (liveSnapshot?.weather ?? null) : null);
@@ -262,7 +266,7 @@
     --faint: #4a705c;
     --phosphor: #3dff8f;
     --accent: #7fe7ff;
-    --outline: #3f8fa6;
+    --outline: #4cc2d8;
     --amber: #ffb020;
     --unknown: #5c8c72;
     --surface: #3c5a4a;
@@ -332,6 +336,12 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+  }
+  /* display.text_scale enlarges everything around the map; the map itself keeps its scale */
+  .bar,
+  aside,
+  .credit-bar {
+    zoom: var(--ui-scale, 1);
   }
   .bar {
     display: flex;
@@ -431,7 +441,8 @@
   aside {
     display: flex;
     flex-direction: column;
-    width: 340px;
+    /* Under zoom, the panel widens at 60% of the text scale; rows truncate rather than wrap */
+    width: calc(340px * (1 + (var(--ui-scale, 1) - 1) * 0.6) / var(--ui-scale, 1));
     border-left: 1px solid var(--line);
   }
   .list-wrap {

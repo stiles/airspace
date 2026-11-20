@@ -62,7 +62,7 @@ def _check_outlines(config: cfg.Config) -> None:
     from airspace import outlines
 
     try:
-        outlines.load(config.map.outlines)
+        outlines.load(config.display.outline_paths)
     except outlines.OutlineError as exc:
         typer.echo(f"Map outline: {exc}", err=True)
         raise typer.Exit(2) from None

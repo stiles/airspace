@@ -37,3 +37,17 @@ def test_template_renders_valid_config():
     assert tomllib.loads(render(34.0, -118.42, "Home"))["home"]["title"] == "Airspace"
     with pytest.raises(ValueError):
         render(-118.42, 34.0, "Reversed")
+
+
+def test_la_boundary_toggle_uses_the_bundled_file_once():
+    from pathlib import Path
+
+    from airspace.config import LA_BOUNDARY, Display
+
+    assert LA_BOUNDARY.is_file()
+    assert Display().outline_paths == []
+    assert Display(show_la_boundary=True).outline_paths == [LA_BOUNDARY]
+    other = Path("elsewhere.geojson")
+    # Listing the bundled file as well doesn't draw it twice
+    both = Display(show_la_boundary=True, outlines=[LA_BOUNDARY, other])
+    assert both.outline_paths == [LA_BOUNDARY, other]

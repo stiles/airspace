@@ -114,6 +114,8 @@ export interface Snapshot {
     collection_radius_m: number;
     /** Radius the map frames; absent or null frames the visible area */
     view_radius_m?: number | null;
+    /** Enlarges the interface around the map, e.g. 1.5 on a TV */
+    text_scale?: number;
     max_altitude_baro_ft: number | null;
   };
   thresholds: { fade_s: number; hide_s: number; trail_gap_s: number; trail_duration_s: number };
@@ -142,7 +144,7 @@ export interface Observation {
   clouds: { amount: string; base_ft: number | null }[] | null;
 }
 
-/** Boundaries from `map.outlines` in airspace.toml, e.g. city limits */
+/** Boundaries from `display.outlines` in airspace.toml, e.g. city limits */
 export type Outlines = FeatureCollection<Geometry, { name: string | null }>;
 
 export interface Weather {
