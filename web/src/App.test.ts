@@ -564,6 +564,31 @@ describe('Behaviors', () => {
       expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.5');
     });
 
+    it('hides the filter controls and applies the configured filters', async () => {
+      const base = snapshot();
+      const parked = aircraft({ id: 'a00001', registration: 'N1', callsign: 'PARKED', on_ground: true, distance_m: 900 });
+      const area = {
+        ...base.area,
+        show_filters: false,
+        filters: { ...base.area.filters!, on_ground: true, max_altitude_baro_ft: 2000 },
+      };
+      render(App, { fetchFn: server([snapshot({ area, aircraft: [heli, jet, parked] })]), pollMs: 60_000 });
+      await advance(0);
+      expect(screen.queryByTestId('altitude-filter')).toBeNull();
+      const rows = within(screen.getByTestId('aircraft-list')).getAllByRole('button');
+      // The jet at 2,550 ft is above the configured 2,000 ft; the parked aircraft is shown
+      expect(rows.map((r) => r.dataset.id)).toEqual(['a00001', 'a1f48f']);
+    });
+
+    it('adds a configured altitude that is not a preset to the menu', async () => {
+      const base = snapshot();
+      const area = { ...base.area, filters: { ...base.area.filters!, max_altitude_baro_ft: 3000 } };
+      render(App, { fetchFn: server([snapshot({ area })]), pollMs: 60_000 });
+      await advance(0);
+      const select = screen.getByTestId('altitude-filter') as HTMLSelectElement;
+      expect(select.selectedOptions[0].textContent).toBe('Below 3,000 ft (barometric)');
+    });
+
     it('leaves the card out when weather is off', async () => {
       render(App, { fetchFn: server([snapshot({ weather: null })]), pollMs: 60_000 });
       await advance(0);

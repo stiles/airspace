@@ -29,8 +29,8 @@ class Home(BaseModel):
 class Area(BaseModel):
     visible_radius_mi: float = Field(default=5.0, gt=0)
     collection_radius_nm: float = Field(default=10.0, gt=0)
-    # Optional preset, e.g. 10000; None shows every altitude
-    max_altitude_baro_ft: int | None = None
+    # Older configs set the altitude filter here; [filters] takes precedence
+    max_altitude_baro_ft: int | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def visible_fits_collection(self) -> Area:
@@ -117,13 +117,30 @@ class Display(BaseModel):
     show_la_boundary: bool = False
     # Other GeoJSON boundaries (lon/lat) drawn as outlines
     outlines: list[Path] = []
-    # Enlarges the header, side panel and weather card (not the map), e.g. 1.5 for a TV
+    # Enlarges the header, side panel, weather card and legend (not the map), e.g. 1.5 for a TV
     text_scale: float = Field(default=1.0, ge=0.75, le=3.0)
+    # The altitude menu and checkboxes above the list; [filters] sets their starting values
+    show_filters: bool = True
 
     @property
     def outline_paths(self) -> list[Path]:
         bundled = [LA_BOUNDARY] if self.show_la_boundary else []
         return bundled + [p for p in self.outlines if p.expanduser().resolve() != LA_BOUNDARY]
+
+
+class Filters(BaseModel):
+    """Starting filters for the map and list; with display.show_filters off, these are fixed."""
+
+    # Hide aircraft at or above this barometric altitude; unset shows every altitude
+    max_altitude_baro_ft: int | None = Field(default=None, gt=0)
+    # Airborne aircraft that report no altitude
+    unknown_altitude: bool = True
+    # Aircraft reporting on the ground, such as parked and taxiing traffic at LAX
+    on_ground: bool = False
+    # ADS-B surface vehicles and obstacles (categories C1-C5)
+    surface_vehicles: bool = False
+    # List only aircraft inside the visible radius (the map always shows the collection area)
+    list_visible_only: bool = True
 
 
 class Weather(BaseModel):
@@ -144,7 +161,14 @@ class Config(BaseModel):
     storage: Storage = Storage()
     enrich: Enrich = Enrich()
     display: Display = Display()
+    filters: Filters = Filters()
     weather: Weather = Weather()
+
+    @model_validator(mode="after")
+    def altitude_filter_from_area(self) -> Config:
+        if self.filters.max_altitude_baro_ft is None and self.area.max_altitude_baro_ft is not None:
+            self.filters.max_altitude_baro_ft = self.area.max_altitude_baro_ft
+        return self
 
     @model_validator(mode="after")
     def collection_within_provider_limit(self) -> Config:
@@ -205,7 +229,6 @@ title = "{title}"
 [area]
 visible_radius_mi = 5.0
 collection_radius_nm = 10.0
-# max_altitude_baro_ft = 10000
 
 [collector]
 provider = "adsbfi"
@@ -245,8 +268,18 @@ catalogs = ["catalogs"]
 show_la_boundary = false
 # Other outlines on the map (GeoJSON in lon/lat)
 # outlines = ["path/to/boundary.geojson"]
-# Larger header, side panel and weather card, e.g. 1.5 for a TV across the room
+# Larger header, side panel, weather card and legend, e.g. 1.5 for a TV across the room
 # text_scale = 1.0
+# Show the altitude menu and checkboxes above the list; false fixes the [filters] below
+show_filters = true
+
+[filters]
+# Starting filters for the map and list
+# max_altitude_baro_ft = 10000
+unknown_altitude = true
+on_ground = false
+surface_vehicles = false
+list_visible_only = true
 
 [weather]
 # Current conditions from the National Weather Service (US only)

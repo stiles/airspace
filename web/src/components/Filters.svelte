@@ -1,7 +1,13 @@
 <script lang="ts">
-  import { ALTITUDE_PRESETS, type Filters } from '../lib/filters';
+  import { altitudePresets, type Filters } from '../lib/filters';
 
-  let { filters = $bindable(), visibleLabel }: { filters: Filters; visibleLabel: string } = $props();
+  let {
+    filters = $bindable(),
+    visibleLabel,
+    configuredAltitude = null,
+  }: { filters: Filters; visibleLabel: string; configuredAltitude?: number | null } = $props();
+
+  const presets = $derived(altitudePresets(configuredAltitude));
 </script>
 
 <fieldset class="filters">
@@ -9,7 +15,7 @@
   <label class="select">
     <span class="visually-hidden">Altitude</span>
     <select bind:value={filters.maxAltitudeFt} data-testid="altitude-filter">
-      {#each ALTITUDE_PRESETS as preset (preset.label)}
+      {#each presets as preset (preset.label)}
         <option value={preset.value}>{preset.label} (barometric)</option>
       {/each}
     </select>

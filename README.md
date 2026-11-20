@@ -75,7 +75,7 @@ For an always-on setup, [docs/pi-setup.md](docs/pi-setup.md) covers installing A
 ### Dashboard
 
 - **Map:** the side list sorts aircraft by distance. Click an aircraft on the map or in the list for details: identity, type, altitude, speed, vertical rate, position source and age. Labels show altitude in hundreds of feet (`015` is 1,500 ft barometric).
-- **Filters:** altitude presets, unknown altitude, on-ground aircraft and surface vehicles. Ground traffic is hidden by default to keep LAX out of the way. Filters run in the browser and never cause extra requests.
+- **Filters:** altitude presets, unknown altitude, on-ground aircraft and surface vehicles. Ground traffic is hidden by default to keep LAX out of the way. Filters run in the browser and never cause extra requests. `[filters]` sets their starting values, and `display.show_filters = false` hides the controls, for a screen nobody touches.
 - **Compact:** the button in the header switches to a map-only layout; clicking an aircraft pins its hover card. Small windows start compact.
 - **Replay:** use the Live/Replay switch. The timeline shows each poll (green succeeded, red failed, hatched while asleep) with an amber strip when a helicopter was in the feed. Drag to seek; space plays and pauses, ← and → step by poll, and the speed runs from 1× to 60×. The URL keeps `?session=&at=`, so any moment can be bookmarked.
 
@@ -119,13 +119,14 @@ Exports include source, terms and timestamp provenance and never include the hom
 | Section | Key settings |
 | --- | --- |
 | `[home]` | `latitude`, `longitude`, `label`, `title` (page header and browser tab; default `Airspace`) |
-| `[area]` | `visible_radius_mi` (5), `collection_radius_nm` (10), `max_altitude_baro_ft` (initial filter preset) |
+| `[area]` | `visible_radius_mi` (5), `collection_radius_nm` (10) |
 | `[collector]` | `poll_interval_s` (10), `fast_interval_s` (2; 0 turns it off), `fast_hold_s` (60), `fast_radius_mi` (unset: the visible radius), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (false; keep gzipped raw responses) |
 | `[freshness]` | `fade_s` (20), `hide_s` (60), `trail_gap_s` (30), `trail_duration_s` (300) |
 | `[behavior]` | Circling, hovering and low-flight thresholds (see below) and `history_s` (900) |
 | `[storage]` | `data_dir` (`data`), `retention_days` (7; 0 keeps everything) |
 | `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off. `catalogs`: operator catalog files or folders (`catalogs`) |
-| `[display]` | `view_radius_mi` (unset: the visible radius plus 8%), `show_la_boundary` (false; draws the Los Angeles city limits), `outlines` (other GeoJSON files in lon/lat), `text_scale` (1; enlarges the header, side panel and weather card, e.g. 1.5 for a TV) |
+| `[display]` | `view_radius_mi` (unset: the visible radius plus 8%), `show_la_boundary` (false; draws the Los Angeles city limits), `outlines` (other GeoJSON files in lon/lat), `text_scale` (1; enlarges the header, side panel, weather card and legend, e.g. 1.5 for a TV), `show_filters` (true) |
+| `[filters]` | Starting filters: `max_altitude_baro_ft` (unset: any altitude), `unknown_altitude` (true), `on_ground` (false), `surface_vehicles` (false), `list_visible_only` (true) |
 | `[weather]` | `enabled` (true), `station` (unset: the nearest NWS station to home, e.g. `KSMO`), `interval_s` (600) |
 
 Fast polling starts when an airborne helicopter, or a cataloged police, fire, medical or news aircraft, is inside the visible area with a position under `fade_s` old, and stays on for `fast_hold_s` after the last one. Set `fast_radius_mi` to trigger farther out, up to the collection radius. Replaying a night's recording, a 5-mile trigger polled fast 11% of the time (about 520 requests an hour); the full 11.5-mile collection area, 67% (about 1,320). adsb.fi allows one request per second, so `fast_interval_s` can't go below 1. Failures drop back to the normal interval and its backoff. Each poll records whether it was fast, and `airspace report` shows the share.

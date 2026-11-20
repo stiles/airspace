@@ -8,7 +8,7 @@
   import Timeline from './components/Timeline.svelte';
   import WeatherCard from './components/WeatherCard.svelte';
   import { ApiError, exportUrl, fetchOutlines, replayTarget, startPolling } from './lib/api';
-  import { applyFilters, defaultFilters, passes, type Filters } from './lib/filters';
+  import { applyFilters, defaultFilters, fromConfig, passes, type Filters } from './lib/filters';
   import { miles } from './lib/format';
   import { loadPref, savePref } from './lib/prefs';
   import { ageAircraft } from './lib/freshness';
@@ -91,7 +91,7 @@
 
   function onSnapshot(s: Snapshot) {
     if (!filtersInitialized) {
-      filters.maxAltitudeFt = s.area.max_altitude_baro_ft;
+      filters = fromConfig(s.area.filters);
       filtersInitialized = true;
     }
   }
@@ -224,7 +224,13 @@
       <footer class="credit-bar">{@render credit()}</footer>
     {:else}
       <aside>
-        <FiltersPanel bind:filters {visibleLabel} />
+        {#if snapshot?.area.show_filters !== false}
+          <FiltersPanel
+            bind:filters
+            {visibleLabel}
+            configuredAltitude={snapshot?.area.filters?.max_altitude_baro_ft ?? null}
+          />
+        {/if}
         <DetailPanel
           aircraft={selected}
           lastSeen={selectedLastSeen}

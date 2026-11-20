@@ -116,7 +116,9 @@ export interface Snapshot {
     view_radius_m?: number | null;
     /** Enlarges the interface around the map, e.g. 1.5 on a TV */
     text_scale?: number;
-    max_altitude_baro_ft: number | null;
+    /** False hides the altitude menu and checkboxes; `filters` then stays fixed */
+    show_filters?: boolean;
+    filters?: ConfigFilters;
   };
   thresholds: { fade_s: number; hide_s: number; trail_gap_s: number; trail_duration_s: number };
   feed: Feed;
@@ -155,6 +157,15 @@ export interface Weather {
   age_s: number | null;
   checked_at: string | null;
   error: string | null;
+}
+
+/** Starting filters from `[filters]` in airspace.toml */
+export interface ConfigFilters {
+  max_altitude_baro_ft: number | null;
+  unknown_altitude: boolean;
+  on_ground: boolean;
+  surface_vehicles: boolean;
+  list_visible_only: boolean;
 }
 
 export const SUPPORTED_SNAPSHOT_VERSION = 1;

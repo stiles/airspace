@@ -75,7 +75,9 @@
     bottom: 34px;
     left: 10px;
     z-index: 2;
+    /* Under zoom, the percentage resolves against the map and the px offsets scale */
     max-height: calc(100% - 90px);
+    zoom: var(--ui-scale, 1);
     overflow-y: auto;
     border: 1px solid var(--control-line);
     border-radius: 4px;

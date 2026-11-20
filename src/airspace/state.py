@@ -346,7 +346,6 @@ class StateBuilder:
                 shown.append(item)
         shown.sort(key=lambda a: a["distance_m"])
         last_seen.sort(key=lambda a: a["last_received_at"], reverse=True)
-        area = self.config.area
         return {
             "version": SNAPSHOT_VERSION,
             "mode": self.mode,
@@ -359,7 +358,8 @@ class StateBuilder:
                 "collection_radius_m": self.config.collection_radius_m,
                 "view_radius_m": self.config.view_radius_m,
                 "text_scale": self.config.display.text_scale,
-                "max_altitude_baro_ft": area.max_altitude_baro_ft,
+                "show_filters": self.config.display.show_filters,
+                "filters": self.config.filters.model_dump(),
             },
             "thresholds": f.model_dump(),
             "feed": self.feed.to_dict(now, f.fade_s, f.hide_s),

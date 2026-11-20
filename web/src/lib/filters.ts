@@ -1,4 +1,4 @@
-import type { Aircraft } from './types';
+import type { Aircraft, ConfigFilters } from './types';
 
 export interface Filters {
   /** Maximum barometric altitude in feet; null shows every altitude */
@@ -28,6 +28,25 @@ export function defaultFilters(maxAltitudeFt: number | null = null): Filters {
     includeSurface: false,
     listVisibleOnly: true,
   };
+}
+
+/** Starting filters from the config; the built-in defaults when the server sends none. */
+export function fromConfig(c: ConfigFilters | undefined): Filters {
+  if (!c) return defaultFilters();
+  return {
+    maxAltitudeFt: c.max_altitude_baro_ft,
+    includeUnknownAltitude: c.unknown_altitude,
+    includeOnGround: c.on_ground,
+    includeSurface: c.surface_vehicles,
+    listVisibleOnly: c.list_visible_only,
+  };
+}
+
+/** The presets, plus a configured altitude that isn't one of them. */
+export function altitudePresets(configured: number | null): { label: string; value: number | null }[] {
+  if (configured === null || ALTITUDE_PRESETS.some((p) => p.value === configured)) return ALTITUDE_PRESETS;
+  const custom = { label: `Below ${configured.toLocaleString('en-US')} ft`, value: configured };
+  return [...ALTITUDE_PRESETS, custom].sort((a, b) => (b.value ?? Infinity) - (a.value ?? Infinity));
 }
 
 export function passes(a: Aircraft, f: Filters): boolean {
