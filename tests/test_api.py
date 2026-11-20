@@ -117,6 +117,52 @@ def test_replay_mode_makes_no_requests(config, ok_transport):
     assert ok_transport.calls == calls
 
 
+def test_weather_view_radius_and_outlines(config, fixture_bytes):
+    from pathlib import Path
+
+    fixtures = Path(__file__).parent / "fixtures"
+    observation = (fixtures / "nws_ksmo_latest.json").read_bytes()
+    station = {"properties": {"stationIdentifier": "KSMO", "name": "Santa Monica"},
+               "geometry": {"type": "Point", "coordinates": [-118.45139, 34.01583]}}  # fmt: skip
+
+    def handler(request):
+        if request.url.host != "api.weather.gov":
+            return httpx.Response(200, content=fixture_bytes)
+        if request.url.path == "/stations/KSMO":
+            return httpx.Response(200, json=station)
+        return httpx.Response(200, content=observation)
+
+    boundary = Path(__file__).resolve().parents[1] / "boundaries" / "los-angeles.geojson"
+    config = config.model_validate(
+        {
+            **config.model_dump(),
+            "weather": {"enabled": True, "station": "KSMO"},
+            "map": {"view_radius_mi": 6, "outlines": [boundary]},
+        }
+    )
+    app = create_app(config, transport=httpx.MockTransport(handler), clock=fast_clock())
+    with TestClient(app) as client:
+        wait_for(lambda: client.get("/api/state").json()["weather"]["status"] != "starting")
+        state = client.get("/api/state").json()
+        weather = state["weather"]
+        assert weather["station"]["id"] == "KSMO"
+        assert weather["observation"]["temperature_f"] == 64
+        assert weather["status"] in ("ok", "stale")  # depends on how old the fixture is
+        assert client.get("/api/health").json()["weather"] == weather["status"]
+        assert round(state["area"]["view_radius_m"]) == 9656
+        outlines = client.get("/api/outlines").json()
+        assert outlines["features"][0]["properties"]["name"] == "Los Angeles city limits"
+
+
+def test_weather_off_and_no_outlines_by_default(config, ok_transport):
+    with TestClient(create_app(config, transport=ok_transport, clock=fast_clock())) as client:
+        wait_for(lambda: ok_transport.calls >= 1)
+        state = client.get("/api/state").json()
+        assert state["weather"] is None and state["area"]["view_radius_m"] is None
+        assert client.get("/api/health").json()["weather"] == "off"
+        assert client.get("/api/outlines").json() == {"type": "FeatureCollection", "features": []}
+
+
 def test_session_closed_on_shutdown(config, ok_transport):
     with TestClient(create_app(config, transport=ok_transport, clock=fast_clock())) as client:
         wait_for(lambda: ok_transport.calls >= 1)

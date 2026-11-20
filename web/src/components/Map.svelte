@@ -10,7 +10,7 @@
   import { miles } from '../lib/format';
   import { tooltipFor } from '../lib/tooltip';
   import Legend from './Legend.svelte';
-  import type { Aircraft, LonLat, Snapshot } from '../lib/types';
+  import type { Aircraft, LonLat, Outlines, Snapshot } from '../lib/types';
 
   interface Props {
     aircraft: Aircraft[];
@@ -19,9 +19,10 @@
     onselect: (id: string | null) => void;
     /** Compact mode: no detail panel, so the selection keeps its hover card open */
     compact?: boolean;
+    outlines?: Outlines | null;
   }
 
-  let { aircraft, area, selectedId, onselect, compact = false }: Props = $props();
+  let { aircraft, area, selectedId, onselect, compact = false, outlines = null }: Props = $props();
 
   const TOKEN = MAPBOX_TOKEN;
 
@@ -42,6 +43,8 @@
   let map: mapboxgl.Map | null = null;
   let ready = $state(false);
   let fittedHome: string | null = null;
+  // Set once someone pans or zooms; until then, size changes (a kiosk window going full screen) refit
+  let userMoved = false;
   let hoveredId = $state<string | null>(null);
   // Bumped on every camera move so the hover card follows its aircraft
   let view = $state(0);
@@ -60,13 +63,17 @@
   const tipLeft = $derived(tipPoint !== null && tipPoint.x > width - 230);
   const tipY = $derived(tipPoint ? Math.min(Math.max(tipPoint.y, 44), Math.max(44, height - 44)) : 0);
   const visibleLabel = $derived(area ? miles(area.visible_radius_m) : '');
+  const outlineNames = $derived([
+    ...new Set((outlines?.features ?? []).map((f) => f.properties?.name ?? 'Boundary')),
+  ]);
 
   function source(id: string): GeoJSONSource | undefined {
     return map?.getSource(id) as GeoJSONSource | undefined;
   }
 
-  function visibleBounds(a: Snapshot['area']): mapboxgl.LngLatBoundsLike {
-    const ring = circle([a.home.longitude, a.home.latitude], a.visible_radius_m * 1.08, 32);
+  function viewBounds(a: Snapshot['area']): mapboxgl.LngLatBoundsLike {
+    const radius = a.view_radius_m ?? a.visible_radius_m * 1.08;
+    const ring = circle([a.home.longitude, a.home.latitude], radius, 32);
     const lons = ring.map((p) => p[0]);
     const lats = ring.map((p) => p[1]);
     return [
@@ -76,7 +83,8 @@
   }
 
   function recenter() {
-    if (map && area) map.fitBounds(visibleBounds(area), { padding: 24, duration: 600 });
+    userMoved = false;
+    if (map && area) map.fitBounds(viewBounds(area), { padding: 24, duration: 600 });
   }
 
   /** Borrow a font stack from the style's own labels, so glyph requests always resolve. */
@@ -104,11 +112,24 @@
       if (image && !m.hasImage(name)) m.addImage(name, image, { sdf: true, pixelRatio: ICON_PIXEL_RATIO });
     }
     const empty = { type: 'FeatureCollection' as const, features: [] };
+    m.addSource('outlines', { type: 'geojson', data: empty });
     m.addSource('rings', { type: 'geojson', data: empty });
     m.addSource('trails', { type: 'geojson', data: empty, lineMetrics: true });
     m.addSource('behaviors', { type: 'geojson', data: empty });
     m.addSource('aircraft', { type: 'geojson', data: empty, promoteId: 'id' });
 
+    m.addLayer({
+      id: 'outlines',
+      type: 'line',
+      source: 'outlines',
+      layout: { 'line-join': 'round' },
+      paint: {
+        'line-color': SCOPE.outline,
+        'line-width': 1.25,
+        'line-opacity': 0.6,
+        'line-emissive-strength': 1,
+      },
+    });
     m.addLayer({
       id: 'rings',
       type: 'line',
@@ -254,6 +275,10 @@
       m.getCanvas().style.cursor = '';
     });
     m.on('move', () => view++);
+    // Camera moves from fitBounds carry no originalEvent; drags, scrolls and the zoom buttons do
+    m.on('movestart', (e) => {
+      if ((e as { originalEvent?: unknown }).originalEvent) userMoved = true;
+    });
   }
 
   onMount(() => {
@@ -286,17 +311,24 @@
     if (!ready || !area || !map) return;
     const home: LonLat = [area.home.longitude, area.home.latitude];
     source('rings')?.setData(rings(home, area.visible_radius_m, area.collection_radius_m));
-    const key = home.join(',');
+    const key = `${home.join(',')},${area.view_radius_m ?? ''}`;
     if (fittedHome !== key) {
       fittedHome = key;
-      map.fitBounds(visibleBounds(area), { padding: 24, duration: 0 });
+      map.fitBounds(viewBounds(area), { padding: 24, duration: 0 });
     }
   });
 
-  // Layout changes (compact mode, the replay bar) resize the container; keep the canvas in step
+  $effect(() => {
+    if (ready) source('outlines')?.setData(outlines ?? { type: 'FeatureCollection', features: [] });
+  });
+
+  // Layout changes (compact mode, the replay bar, a window going full screen) resize the container;
+  // keep the canvas in step, and keep the home view framed until someone moves the map
   $effect(() => {
     if (!ready || !width || !height) return;
     map?.resize();
+    const a = untrack(() => area);
+    if (!userMoved && map && a) map.fitBounds(viewBounds(a), { padding: 24, duration: 0 });
   });
 
   // Switching layouts changes the map size a lot; refit so the visible area stays in view
@@ -307,7 +339,7 @@
     fittedCompact = c;
     requestAnimationFrame(() => {
       map?.resize();
-      if (map && area) map.fitBounds(visibleBounds(area), { padding: 24, duration: 0 });
+      if (map && area) map.fitBounds(viewBounds(area), { padding: 24, duration: 0 });
     });
   });
 
@@ -327,7 +359,7 @@
     {#if area}
       <!-- Remount on layout change so each layout keeps its own open/closed choice -->
       {#key compact}
-        <Legend {visibleLabel} {compact} />
+        <Legend {visibleLabel} {compact} {outlineNames} />
       {/key}
     {/if}
     {#if tip && tipPoint}

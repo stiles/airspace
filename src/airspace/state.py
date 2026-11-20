@@ -357,6 +357,7 @@ class StateBuilder:
                 "home": self.config.home.model_dump(),
                 "visible_radius_m": self.config.visible_radius_m,
                 "collection_radius_m": self.config.collection_radius_m,
+                "view_radius_m": self.config.view_radius_m,
                 "max_altitude_baro_ft": area.max_altitude_baro_ft,
             },
             "thresholds": f.model_dump(),

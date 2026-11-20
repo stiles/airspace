@@ -378,7 +378,9 @@ The report prints the milestone 1 gate plus latency, cached and repeated positio
 - The palette lives twice, in `lib/theme.ts` for the map and as CSS variables in `App.svelte`; keep them in step.
 - Overlays set `*-emissive-strength: 1` so Standard's night lighting doesn't dim them. `line-gradient` trails need `lineMetrics: true` on the source and can't vary color per feature, so each trail color has its own layer.
 - Positions keep aging on the browser clock between polls, using the server's thresholds. If the local server stops responding, markers fade and disappear instead of freezing.
-- The map resizes with its container (compact mode, the replay bar) and refits the visible area when the layout switches.
+- The map resizes with its container (compact mode, the replay bar, a kiosk window going full screen) and refits the home view (`map.view_radius_mi`, else the visible area) on every resize until someone pans or zooms. A Chromium kiosk can lay out before it reaches full screen, and the first fit used to stick, showing a much wider area on the TV. Recenter clears the manual-move flag.
+- Weather (added November 19, 2026) comes from api.weather.gov: the backend resolves the station once (`/points` → `observationStations`, nearest first, unless `weather.station` is set), then fetches `/stations/{id}/observations/latest` every 10 minutes. Failures retry after 60 s, doubling up to the interval, and keep the last observation. It rides along in `/api/state` as `weather`, live only, and isn't recorded. Stations report about hourly, so the card shows the observation's age and marks it stale past two hours. Values with QC flag `X` are dropped; ceiling is the lowest BKN, OVC or VV layer.
+- `boundaries/los-angeles.geojson` is the Census TIGERweb incorporated place for Los Angeles (GEOID 0644000), simplified to 0.0003°. `map.outlines` files are checked at startup and must be lon/lat polygons or lines.
 - Browser checks use Playwright with the cached Chromium and SwiftShader flags (`--use-angle=swiftshader --enable-unsafe-swiftshader`), against live data and replays of session 1.
 
 ### Test fixture

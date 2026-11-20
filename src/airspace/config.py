@@ -109,6 +109,22 @@ class Enrich(BaseModel):
     catalogs: list[Path] = [Path("catalogs")]
 
 
+class MapView(BaseModel):
+    # Radius around home the map frames on load and resize; unset frames the visible area
+    view_radius_mi: float | None = Field(default=None, gt=0)
+    # GeoJSON boundaries (lon/lat) drawn as faint outlines, e.g. city limits (see boundaries/)
+    outlines: list[Path] = []
+
+
+class Weather(BaseModel):
+    # Current conditions at home from the National Weather Service (US only)
+    enabled: bool = True
+    # Observation station ID, e.g. "KSMO"; unset uses the nearest station NWS lists for home
+    station: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{3,8}$")
+    # Stations report about hourly; NWS asks clients not to poll aggressively
+    interval_s: float = Field(default=600.0, ge=60)
+
+
 class Config(BaseModel):
     home: Home
     area: Area = Area()
@@ -117,6 +133,8 @@ class Config(BaseModel):
     behavior: Behavior = Behavior()
     storage: Storage = Storage()
     enrich: Enrich = Enrich()
+    map: MapView = MapView()
+    weather: Weather = Weather()
 
     @model_validator(mode="after")
     def collection_within_provider_limit(self) -> Config:
@@ -139,6 +157,11 @@ class Config(BaseModel):
     @property
     def collection_radius_m(self) -> float:
         return self.area.collection_radius_nm * METERS_PER_NM
+
+    @property
+    def view_radius_m(self) -> float | None:
+        mi = self.map.view_radius_mi
+        return None if mi is None else mi * METERS_PER_MILE
 
     @property
     def fast_radius_m(self) -> float:
@@ -204,6 +227,18 @@ retention_days = 7
 hangarbay_db = "~/.hangarbay/data/publish/registry.duckdb"
 # Operator and role catalogs: CSV files or directories of them
 catalogs = ["catalogs"]
+
+[map]
+# Frame this radius around home on load and resize; unset frames the visible area
+# view_radius_mi = 6.0
+# Faint outlines on the map, e.g. city limits (GeoJSON in lon/lat)
+# outlines = ["boundaries/los-angeles.geojson"]
+
+[weather]
+# Current conditions from the National Weather Service (US only)
+enabled = true
+# Station ID, e.g. "KSMO"; unset uses the nearest station to home
+# station = "KSMO"
 """
 
 

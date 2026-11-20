@@ -1,4 +1,4 @@
-import { SUPPORTED_SNAPSHOT_VERSION, type SessionInfo, type Snapshot, type Timeline } from './types';
+import { SUPPORTED_SNAPSHOT_VERSION, type Outlines, type SessionInfo, type Snapshot, type Timeline } from './types';
 
 export const POLL_INTERVAL_MS = 2_000;
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -46,6 +46,14 @@ export function fetchSessions(fetchFn: typeof fetch = fetch): Promise<SessionInf
 
 export function fetchTimeline(sessionId: number, fetchFn: typeof fetch = fetch): Promise<Timeline> {
   return getJson<Timeline>(`/api/sessions/${sessionId}/timeline`, fetchFn);
+}
+
+export async function fetchOutlines(fetchFn: typeof fetch = fetch): Promise<Outlines> {
+  const outlines = await getJson<Outlines>('/api/outlines', fetchFn);
+  if (outlines?.type !== 'FeatureCollection' || !Array.isArray(outlines.features)) {
+    throw new ApiError('Map outlines are not a FeatureCollection');
+  }
+  return outlines;
 }
 
 export async function fetchSnapshot(replay: ReplayTarget | null, fetchFn: typeof fetch = fetch): Promise<Snapshot> {

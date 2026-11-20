@@ -16,7 +16,9 @@ What's flying near home right now? Airspace is a local aircraft tracker. It poll
 - **Compact mode:** a map-only layout for a small always-on window.
 - **Behaviors:** circling, hovering and low flight, inferred from each track and shown as chips, hover-card lines and dashed rings on the map, with an export for stories.
 - **Adaptive polling:** one request every 10 seconds, or every 2 seconds while a helicopter or public-safety aircraft is in the visible area, so orbits read as circles rather than triangles.
-- **Local only:** one collector, one request at a time, an API bound to `127.0.0.1`. The browser never contacts the data provider.
+- **Weather:** current conditions from the nearest National Weather Service station (temperature, wind, visibility and ceiling) with the observation's age.
+- **Map framing and outlines:** a home view radius separate from the visible area, and boundaries such as the LA city limits drawn on the map.
+- **Local only:** one collector, one request at a time, an API bound to `127.0.0.1`. The browser never contacts the data provider or the weather service.
 
 ## Requirements
 
@@ -77,6 +79,9 @@ For an always-on setup, [docs/pi-setup.md](docs/pi-setup.md) covers installing A
 - **Compact:** the button in the header switches to a map-only layout; clicking an aircraft pins its hover card. Small windows start compact.
 - **Replay:** use the Live/Replay switch. The timeline shows each poll (green succeeded, red failed, hatched while asleep) with an amber strip when a helicopter was in the feed. Drag to seek; space plays and pauses, ← and → step by poll, and the speed runs from 1× to 60×. The URL keeps `?session=&at=`, so any moment can be bookmarked.
 
+- **Weather:** the card at the top right shows the latest observation from the station in `[weather]`, its time and how old it is. Stations report about hourly; past two hours the card dims and says the station isn't reporting. It's live only and isn't recorded, so replay doesn't show it.
+- **Home view:** the map frames `map.view_radius_mi` around home, or the visible area when that's unset, and refits when the window changes size until you pan or zoom. Recenter returns to it.
+
 To use a different Mapbox style, add `VITE_MAPBOX_STYLE=mapbox://styles/...` to `web/.env.local` and rebuild. Classic styles are recolored into the radar palette; Mapbox Standard styles keep their own colors.
 
 ### Exports
@@ -98,7 +103,8 @@ Exports include source, terms and timestamp provenance and never include the hom
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/state` | Snapshot: aircraft by distance with freshness and trails, recently lost aircraft, entry/exit events, area and feed status |
+| `GET /api/state` | Snapshot: aircraft by distance with freshness and trails, recently lost aircraft, entry/exit events, area, feed status and weather |
+| `GET /api/outlines` | Map outlines from `map.outlines`, as one GeoJSON FeatureCollection |
 | `GET /api/aircraft/{id}` | One aircraft with owner/operator and recent positions |
 | `GET /api/health` | Collector status, feed status, a position-age summary and the process's memory |
 | `GET /api/sessions` | Recorded sessions |
@@ -119,6 +125,8 @@ Exports include source, terms and timestamp provenance and never include the hom
 | `[behavior]` | Circling, hovering and low-flight thresholds (see below) and `history_s` (900) |
 | `[storage]` | `data_dir` (`data`), `retention_days` (7; 0 keeps everything) |
 | `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off. `catalogs`: operator catalog files or folders (`catalogs`) |
+| `[map]` | `view_radius_mi` (unset: the visible radius plus 8%), `outlines` (GeoJSON files in lon/lat, e.g. `["boundaries/los-angeles.geojson"]`) |
+| `[weather]` | `enabled` (true), `station` (unset: the nearest NWS station to home, e.g. `KSMO`), `interval_s` (600) |
 
 Fast polling starts when an airborne helicopter, or a cataloged police, fire, medical or news aircraft, is inside the visible area with a position under `fade_s` old, and stays on for `fast_hold_s` after the last one. Set `fast_radius_mi` to trigger farther out, up to the collection radius. Replaying a night's recording, a 5-mile trigger polled fast 11% of the time (about 520 requests an hour); the full 11.5-mile collection area, 67% (about 1,320). adsb.fi allows one request per second, so `fast_interval_s` can't go below 1. Failures drop back to the normal interval and its backoff. Each poll records whether it was fast, and `airspace report` shows the share.
 
@@ -187,7 +195,9 @@ npm run dev                      # http://127.0.0.1:5173, forwards /api to airsp
 ```
 src/airspace/      Python package: providers/, collector, state, storage, replay, API, exports, CLI
 web/src/           Svelte 5 dashboard: components/, lib/ (API client, geometry, theme, replay)
-tests/             pytest suite and a captured adsb.fi fixture
+tests/             pytest suite, a captured adsb.fi response and an NWS observation
+catalogs/          Operator and role catalogs
+boundaries/        Map outlines (LA city limits)
 docs/exports.md    Export formats
 docs/pi-setup.md   Raspberry Pi 5 setup
 docs/raspberry-pi-kiosk.md   Raspberry Pi kiosk: systemd service, Chromium autostart, updates
@@ -199,7 +209,7 @@ Backend tests cover adapter edge cases, geometry, collector failure handling wit
 
 ## Data and terms
 
-Aircraft data comes from [adsb.fi](https://adsb.fi), whose open data is for personal, noncommercial use and requires attribution, which the dashboard shows. Check the terms before any newsroom or commercial use. Coverage depends on volunteer receivers; aircraft can be missing, late or misidentified, and an empty map is not proof of an empty sky.
+Aircraft data comes from [adsb.fi](https://adsb.fi), whose open data is for personal, noncommercial use and requires attribution, which the dashboard shows. Check the terms before any newsroom or commercial use. Weather comes from the [National Weather Service API](https://www.weather.gov/documentation/services-web-api) (US only, public domain), and the LA city limits from the Census Bureau's TIGERweb. Coverage depends on volunteer receivers; aircraft can be missing, late or misidentified, and an empty map is not proof of an empty sky.
 
 ## License
 
