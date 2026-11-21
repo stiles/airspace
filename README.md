@@ -1,218 +1,97 @@
 # Airspace
 
-What's flying near home right now? Airspace is a local aircraft tracker. It polls the adsb.fi open data API for traffic around a home point, records it, and shows it on a radar-style Mapbox dashboard, with particular attention to helicopters and low-altitude traffic.
+Airspace records aircraft near a home point and shows them on a radar-style map. It highlights helicopters, identifies known operators, and infers circling, hovering and low flight from recorded positions. Sessions go into a local SQLite database for replay, coverage reports and exports.
 
-![Airspace dashboard: a radar-style dark green map of West Los Angeles with mile rings, phosphor-green aircraft and trails, helicopters in amber, and a list of nearby aircraft](img/airspace_example.png)
-
-## Features
-
-- **Live map:** aircraft within a configurable radius, rotated by ground track, with fading trails, altitude labels, mile rings, a legend and hover cards. Helicopters are amber.
-- **Honest freshness:** positions age on screen between updates and fade, then disappear, when they go stale. Any outage turns the header red and grays out the map, so it never reads as an empty sky.
-- **Helicopter classification:** ADS-B emitter category A7, then the FAA registry through [hangarbay](https://github.com/stiles/hangarbay) when it's installed.
-- **Operators and roles:** a catalog identifies police, fire, medical, news and utility aircraft (LAPD, LASD, LA County Fire, CHP and more for Los Angeles), with the source for each identification. Aircraft registered to individuals show as private, without a name.
-- **Recording and replay:** every poll is stored in SQLite. Replay any session on a timeline that shows failed polls, laptop sleep and helicopter activity.
-- **Exports:** JSON or GeoJSON (tracks or points) with provenance, and run folders for [FlightTracer](https://github.com/stiles/flight-tracer).
-- **Coverage reports:** request success, position age, helicopter continuity, gaps and storage for any recorded session.
-- **Compact mode:** a map-only layout for a small always-on window.
-- **Behaviors:** circling, hovering and low flight, inferred from each track and shown as chips, hover-card lines and dashed rings on the map, with an export for stories.
-- **Adaptive polling:** one request every 10 seconds, or every 2 seconds while a helicopter or public-safety aircraft is in the visible area, so orbits read as circles rather than triangles.
-- **Weather:** current conditions from the nearest National Weather Service station (temperature, wind, visibility and ceiling) with the observation's age.
-- **Map framing and outlines:** a home view radius separate from the visible area, and boundaries such as the LA city limits drawn on the map.
-- **Local only:** one collector, one request at a time, an API bound to `127.0.0.1`. The browser never contacts the data provider or the weather service.
-
-## Requirements
-
-- macOS or Linux, Python 3.12+ and [uv](https://docs.astral.sh/uv/)
-- Node.js 20.19+ or 22.12+ to build the dashboard
-- A public Mapbox token (`pk.`) for the map
-- Optional: [hangarbay](https://github.com/stiles/hangarbay) with a downloaded FAA registry, for helicopter lookups beyond ADS-B category
+![Airspace dashboard with green aircraft tracks, amber helicopters and a list of nearby aircraft](img/airspace_example.png)
 
 ## Quick start
 
+Install Python 3.12+, [uv](https://docs.astral.sh/uv/) and Node.js on macOS or Linux. Use Node 20.19 or later in the 20.x series, 22.13 or later in the 22.x series, or 24 or newer. Replace `pk.REPLACE_ME` with a public Mapbox token.
+
 ```bash
-git clone https://github.com/stiles/airspace.git && cd airspace
-uv sync --extra enrich                  # drop --extra enrich to skip FAA registry lookups
-uv run airspace init                    # prompts for home coordinates and a page title; writes airspace.toml
+git clone https://github.com/stiles/airspace.git
+cd airspace
+uv sync
+uv run airspace init
 
-echo 'VITE_MAPBOX_TOKEN=pk....' > web/.env.local
-cd web && npm install && npm run build && cd ..
+echo 'VITE_MAPBOX_TOKEN=pk.REPLACE_ME' > web/.env.local
+npm --prefix web ci
+npm --prefix web run build
 
-uv run airspace serve                   # collector + dashboard at http://127.0.0.1:8000
+uv run airspace serve
 ```
 
-`airspace init --demo` uses an approximate West LA center instead of prompting. `airspace.toml`, `web/.env.local`, `data/` and `web/dist/` are all gitignored. The token is built into the bundle, so restrict it to `http://127.0.0.1:*` in your Mapbox account.
+Open [the dashboard](http://127.0.0.1:8000/). `init` asks for home coordinates in decimal degrees, a label and a page title. Use `uv run airspace init --demo` for an approximate West LA center.
 
-After a `git pull`, rebuild the dashboard (`cd web && npm run build`); `web/dist/` isn't tracked, so the old build keeps serving until you do. `airspace serve` warns when the build is missing or older than its source. `init` won't overwrite an existing `airspace.toml`, so add new settings such as `title` to it by hand.
+Use a dedicated public token for local development. The browser bundle includes it. Mapbox URL restrictions do not accept IP addresses or wildcards. If you restrict the token to `http://localhost:8000`, open the dashboard at that address. [Mapbox token documentation](https://docs.mapbox.com/accounts/guides/tokens/#url-restrictions)
 
-## Usage
+`airspace.toml`, `web/.env.local`, `data/` and `web/dist/` stay out of Git. The collector and API run on the same machine and bind to `127.0.0.1`. The browser loads the basemap from Mapbox and reads aircraft and weather from the local API.
+
+## Use the dashboard
+
+- The list sorts aircraft by distance and shows its radius. Hover over a marker to highlight its row. Hover over a row or tab to it to highlight the marker and trail. Select a row for details and to bring an offscreen aircraft into view.
+- **Activity** appears above the list when a listed aircraft is inferred to be circling or hovering. Select the behavior to frame it on the map. **Recenter** returns to the home view.
+- Traffic beyond the home radius has shorter labels and thinner trails. Individual mile labels return as you zoom in. Open **Legend** for symbols and altitude codes such as `015`, which means 1,500 ft barometric.
+- The filters control altitude, aircraft on the ground, surface vehicles and the list radius. Ground traffic is hidden by default. **Compact** switches to a map-only layout. Select a marker there to pin its card.
+- Open **Weather** for the latest station observation, wind gusts, visibility and ceiling. Observations older than two hours are marked stale. Weather appears in live mode.
+- Switch to **Replay** to seek through a recorded session. Green polls succeeded, red polls failed, hatching shows sleep gaps, and amber marks polls with an ADS-B category A7 aircraft. Space plays or pauses, and ← and → step by poll. The replay URL bookmarks the session and time.
+
+## Record, review and export
+
+Run these commands from the repository root.
 
 | Command | What it does |
 | --- | --- |
-| `airspace init` | Write `airspace.toml` with your home coordinates and page title |
-| `airspace serve` | Run the collector and the dashboard/API together |
-| `airspace collect --duration 2h` | Record headlessly, without the dashboard |
-| `airspace report --session latest` | Print a coverage report for a session |
-| `airspace sessions` | List recorded sessions |
-| `airspace replay --session latest` | Serve recorded data only, with no provider requests |
-| `airspace export --format geojson` | Export a session (see below) |
-| `airspace catalog` | Check the operator catalogs against the FAA registry |
+| `uv run airspace serve` | Collect data and serve the dashboard |
+| `uv run airspace collect --duration 2h` | Record without the dashboard |
+| `uv run airspace sessions` | List available recordings |
+| `uv run airspace report --session latest` | Summarize coverage, freshness, gaps and detected behaviors |
+| `uv run airspace replay --session latest --port 8001` | Replay a recording alongside the live server |
+| `uv run airspace export --session latest --format geojson -o tracks.geojson` | Export recorded tracks |
+| `uv run airspace catalog` | Validate operator catalogs and check them against the FAA registry when available |
 
-Every command takes `--config` for a config file other than `airspace.toml`, and `--help` lists the rest. Only one collector can run against a data directory at a time, so `serve` refuses to start while `collect` is running, and vice versa.
+Only one collector can write to a data directory at a time. Replay serves recorded data and makes no aircraft-provider requests. The API binds to loopback in both modes. Use [interactive API docs](http://127.0.0.1:8000/api/docs) for endpoints and parameters, or [the export guide](docs/exports.md) for formats and examples.
 
-### Long runs
+On macOS, `caffeinate -i uv run airspace serve` blocks idle sleep while recording. Closing the lid can still put the Mac to sleep. For an always-on monitor, see [Raspberry Pi setup](docs/pi-setup.md) and [kiosk installation and recovery](docs/raspberry-pi-kiosk.md).
 
-macOS sleeps an idle laptop, and the collector records that as a gap rather than coverage. Wrap long runs in `caffeinate -i`, which blocks idle sleep while the command runs:
+## Configure the view
 
-```bash
-caffeinate -i uv run airspace serve
-caffeinate -i uv run airspace collect --duration 8h
-```
+Airspace has three independent radii. Set them in `airspace.toml` and restart the server.
 
-Closing the lid still sleeps most MacBooks; `caffeinate -s` also blocks system sleep, but only on AC power.
-
-For an always-on setup, [docs/pi-setup.md](docs/pi-setup.md) covers installing Airspace on a Raspberry Pi 5 and showing the dashboard on a connected monitor. [docs/raspberry-pi-kiosk.md](docs/raspberry-pi-kiosk.md) then makes the Pi start the backend and a full-screen dashboard on its own at boot (`./scripts/install-pi-kiosk.sh`).
-
-### Dashboard
-
-- The aircraft list shows its distance limit and sorts by distance. Hover over a marker to highlight its row. Hover over a row or tab to it to highlight the marker and trail. Select a row to open details and bring an offscreen aircraft into view.
-- **Activity** appears above the list when a listed aircraft is inferred to be circling or hovering. Select the behavior to frame it on the map. **Recenter** returns to the home view.
-- Aircraft outside the home radius have shorter labels and thinner trails. At wider zooms, only the major distance rings have labels. Open **Legend** for map symbols and altitude labels (`015` is 1,500 ft barometric).
-- **Filters:** altitude presets, unknown altitude, on-ground aircraft and surface vehicles. Ground traffic is hidden by default to keep LAX out of the way. Filters run in the browser and never cause extra requests. `[filters]` sets their starting values, and `display.show_filters = false` hides the controls, for a screen nobody touches.
-- **Compact:** the button in the header switches to a map-only layout; clicking an aircraft pins its hover card. Small windows start compact.
-- **Replay:** use the Live/Replay switch. The timeline shows each poll (green succeeded, red failed, hatched while asleep) with an amber strip when a helicopter was in the feed. Drag to seek; space plays and pauses, ← and → step by poll, and the speed runs from 1× to 60×. The URL keeps `?session=&at=`, so any moment can be bookmarked.
-
-- Open **Weather** at the bottom of the sidebar, or on the map in compact mode, for wind gusts, visibility, ceiling and observation time. The summary marks observations older than two hours as stale. Weather appears in live mode.
-- **Home view:** the map frames `display.view_radius_mi` around home, or the visible area when that's unset, and refits when the window changes size until you pan or zoom. Recenter returns to it.
-
-To use a different Mapbox style, add `VITE_MAPBOX_STYLE=mapbox://styles/...` to `web/.env.local` and rebuild. Classic styles are recolored into the radar palette; Mapbox Standard styles keep their own colors.
-
-### Exports
-
-From the replay bar (a whole session) or the detail panel (one aircraft), or on the command line:
-
-```bash
-uv run airspace export --session latest --format geojson --geometry tracks -o tracks.geojson
-uv run airspace export --format json --start 2026-10-17T19:00:00Z --end 2026-10-17T20:00:00Z -o hour.json
-uv run airspace export --format flighttracer --aircraft a1f0d8 -o runs/n224la
-uv run airspace export --geometry behaviors -o orbits.geojson     # one point per circling/hovering episode
-```
-
-Exports include source, terms and timestamp provenance and never include the home point. See [docs/exports.md](docs/exports.md) for the formats.
-
-### API
-
-`serve` exposes a read-only JSON API at `http://127.0.0.1:8000`, with interactive docs at `/api/docs`. Coordinates are always `[longitude, latitude]`.
-
-| Endpoint | Returns |
-| --- | --- |
-| `GET /api/state` | Snapshot: aircraft by distance with freshness and trails, recently lost aircraft, entry/exit events, area, feed status and weather |
-| `GET /api/outlines` | Map outlines (`show_la_boundary` and `outlines`), as one GeoJSON FeatureCollection |
-| `GET /api/aircraft/{id}` | One aircraft with owner/operator and recent positions |
-| `GET /api/health` | Collector status, feed status, a position-age summary and the process's memory |
-| `GET /api/sessions` | Recorded sessions |
-| `GET /api/replay?session_id=&at=` | Snapshot rebuilt from records received by `at` (ISO 8601) |
-| `GET /api/sessions/{id}/timeline` | Per-poll outcomes and sleep gaps, for the replay bar |
-| `GET /api/sessions/{id}/export` | JSON or GeoJSON download, with `geometry`, `aircraft` (comma-separated) and a time window |
-
-## Configuration
-
-`airspace init` writes `airspace.toml` with every setting and its default:
-
-| Section | Key settings |
-| --- | --- |
-| `[home]` | `latitude`, `longitude`, `label`, `title` (page header and browser tab; default `Airspace`) |
-| `[area]` | `visible_radius_mi` (5), `collection_radius_nm` (10) |
-| `[collector]` | `poll_interval_s` (10), `fast_interval_s` (2; 0 turns it off), `fast_hold_s` (60), `fast_radius_mi` (unset: the visible radius), `timeout_s` (8), `max_backoff_s` (300), `store_raw` (false; keep gzipped raw responses) |
-| `[freshness]` | `fade_s` (20), `hide_s` (60), `trail_gap_s` (30), `trail_duration_s` (300) |
-| `[behavior]` | Circling, hovering and low-flight thresholds (see below) and `history_s` (900) |
-| `[storage]` | `data_dir` (`data`), `retention_days` (7; 0 keeps everything) |
-| `[enrich]` | `hangarbay_db`: path to hangarbay's registry; delete the line to turn lookups off. `catalogs`: operator catalog files or folders (`catalogs`) |
-| `[display]` | `view_radius_mi` (unset: the visible radius plus 8%), `show_la_boundary` (false; draws the Los Angeles city limits), `outlines` (other GeoJSON files in lon/lat), `text_scale` (1; enlarges the header, side panel, weather card and legend, e.g. 1.5 for a TV), `show_filters` (true) |
-| `[filters]` | Starting filters: `max_altitude_baro_ft` (unset: any altitude), `unknown_altitude` (true), `on_ground` (false), `surface_vehicles` (false), `list_visible_only` (true) |
-| `[weather]` | `enabled` (true), `station` (unset: the nearest NWS station to home, e.g. `KSMO`), `interval_s` (600) |
-
-Fast polling starts when an airborne helicopter, or a cataloged police, fire, medical or news aircraft, is inside the visible area with a position under `fade_s` old, and stays on for `fast_hold_s` after the last one. Set `fast_radius_mi` to trigger farther out, up to the collection radius. Replaying a night's recording, a 5-mile trigger polled fast 11% of the time (about 520 requests an hour); the full 11.5-mile collection area, 67% (about 1,320). adsb.fi allows one request per second, so `fast_interval_s` can't go below 1. Failures drop back to the normal interval and its backoff. Each poll records whether it was fast, and `airspace report` shows the share.
-
-The collector prunes recordings older than `retention_days` when it starts and every hour after, removing sessions it empties along with their raw files. SQLite grows about 3–4 MB/hour, so a week takes roughly 600 MB; `store_raw = true` adds about 1 MB/hour. Deleted space is reused rather than returned to the disk; run `sqlite3 data/airspace.sqlite VACUUM` with the collector stopped to shrink the file.
-
-Each hour the collector also records its memory use, which `airspace report` shows as a trend.
-
-## Helicopter classification
-
-The classifier tries these in order and records which rule decided:
-
-1. ADS-B emitter category `A7`.
-2. FAA registry aircraft type, by ICAO hex, from hangarbay's DuckDB at `~/.hangarbay/data/publish/registry.duckdb`. Code `6` is rotorcraft and `9` is gyroplane. US-registered aircraft only, as current as your last `hangar update`.
-3. Unknown.
-
-Categories C1 through C5 are surface vehicles and obstacles, kept separate from aircraft.
-
-## Operators and roles
-
-CSV files in `catalogs/` say who operates an aircraft and in what role: `police`, `fire`, `medical`, `news`, `military`, `tour`, `utility`, `training` or `private`. Matching tries, in order:
-
-1. ICAO hex, then registration, from an aircraft file such as `catalogs/los-angeles.csv`.
-2. Callsign prefix (e.g. `LAC` for LA County Fire), for helicopters only, since a three-letter prefix can collide with an airline code.
-3. The registered owner's name (from the provider or hangarbay) against the patterns in `catalogs/operators.csv`, e.g. `CALIFORNIA HIGHWAY PATROL`, or any owner name with `POLICE` or `SHERIFF`.
-4. Private, when hangarbay lists individuals as owners. Their names are hidden on the dashboard and in exports.
-
-Everything else is unidentified; nothing is guessed from aircraft type or flight pattern. Each aircraft row needs a `source`, and `checked` holds the date an identification was confirmed. The dashboard marks rows without it as inferred. Run `airspace catalog` after editing to validate the files and compare each hex with its FAA registration.
-
-| Column | Aircraft files | |
+| Setting | Default | Controls |
 | --- | --- | --- |
-| `registration`, `icao_hex` | At least one | Hex is the six-digit ICAO address in lowercase |
-| `operator`, `operator_short` | Operator required (except `private`) | Short name is for labels and tags, e.g. `LAPD` |
-| `role` | Required | One of the roles above |
-| `callsign_prefix` | Optional | Two to four letters |
-| `type_note`, `source`, `checked` | Source required | |
+| `area.collection_radius_nm` | 10 nautical miles (11.5 statute miles) | How far out the collector asks the provider for traffic |
+| `area.visible_radius_mi` | 5 statute miles | The home ring and the default aircraft list limit |
+| `display.view_radius_mi` | Home radius plus 8% | The map framing on load and when you select **Recenter** |
 
-Pattern files have `pattern` (a case-insensitive regular expression), `operator`, `operator_short`, `role` and `source`. A pattern without an operator uses the owner's own name.
+Set `display.view_radius_mi` to match `area.visible_radius_mi` if you want Recenter to frame the list radius. Set `filters.list_visible_only = false` to list traffic throughout the collection area. Settings for the title, FAA registry, operator catalogs, polling, retention and the kiosk are in the [configuration guide](docs/configuration.md).
 
-## Behaviors
+## Troubleshoot
 
-Airspace infers three behaviors from positions alone. They describe the track, not the reason for it.
-
-| Behavior | Rule (defaults) | Applies to |
-| --- | --- | --- |
-| Circling | Net turn of 360° within 300 s, staying within 1,500 m of the window's center, faster than 20 kt. Orbits over the same spot up to 120 s apart are one episode; an orbit that moves on starts a new one. Turns count the largest one-way turn, so reversing doesn't cancel orbits | All aircraft |
-| Hovering | Airborne at 15 kt or less for 60 s, within 200 m | Helicopters |
-| Low | Barometric altitude at or below 300 ft for 20 s. That's above sea level, not above ground, so it suits the basin, not the hills | Helicopters |
-
-The map, list, hover card and detail panel show behaviors under way: a dashed ring at the episode's center and median radius, and text like "Circling 12 min · 25 turns · radius 142 m". Live detection looks back `history_s` (15 minutes), so longer episodes show as "15+ min"; replay uses the same window. The report lists every episode in a session, and `--geometry behaviors` exports them as GeoJSON points with the rules in the metadata.
-
-On the first overnight recording, this found LAPD orbits of 30–54 minutes at 140–250 m radius, and two helicopters hovering together at 1,800 ft, which is typical of news coverage. At 10-second polling, tight orbits are only a few points per turn, so fast polling matters here.
+- **The dashboard looks out of date or omits aircraft after a pull.** Run `npm --prefix web ci` and `npm --prefix web run build`, then refresh. The server serves the existing bundle until you rebuild it. A rebuild also applies changes to `web/.env.local`.
+- **The live view looks empty.** Verify that you're in Live mode and check the feed status. Run `curl http://127.0.0.1:8000/api/health` from the machine running Airspace. If polls are succeeding, check the altitude and ground filters, the list radius and the map framing.
+- **The basemap is blank.** Check the public token in `web/.env.local`, the allowed URL if your token has restrictions, and the internet connection. Rebuild after editing the token.
+- **The collector is already locked.** Stop the other `serve` or `collect` process if you intend to take over recording. Use `replay` on a separate port to inspect a session while it runs.
 
 ## Development
 
 ```bash
 uv sync --extra enrich
-uv run pytest                    # backend
-
-cd web
-npm install
-npm test                         # Vitest
-npm run check                    # svelte-check and TypeScript
-npm run dev                      # http://127.0.0.1:5173, forwards /api to airspace serve on :8000
+uv run pytest
+npm --prefix web ci
+npm --prefix web test
+npm --prefix web run check
 ```
 
-```
-src/airspace/      Python package: providers/, collector, state, storage, replay, API, exports, CLI
-web/src/           Svelte 5 dashboard: components/, lib/ (API client, geometry, theme, replay)
-tests/             pytest suite, a captured adsb.fi response and an NWS observation
-catalogs/          Operator and role catalogs
-boundaries/        Map outlines (LA city limits)
-docs/exports.md    Export formats
-docs/pi-setup.md   Raspberry Pi 5 setup
-docs/raspberry-pi-kiosk.md   Raspberry Pi kiosk: systemd service, Chromium autostart, updates
-scripts/, deploy/  Pi installer, update script, kiosk launcher and systemd unit template
-PLANNING.md        Original plan, milestone decisions and implementation notes
-```
+With `airspace serve` running on port 8000, run `npm --prefix web run dev` for the Vite dashboard on port 5173. Allow that port too if you use a URL-restricted Mapbox token.
 
-Backend tests cover adapter edge cases, geometry, collector failure handling with a fake clock, state and trails, replay matching the live snapshot, exports and the API against a mock provider. Frontend tests cover formatting, filters, freshness, replay control and the app with a Mapbox mock. [PLANNING.md](PLANNING.md) has the design decisions and how things fit together.
+The backend lives in `src/airspace/` and the Svelte dashboard in `web/src/`. See [the roadmap](PLANNING.md) for open work and design constraints.
 
 ## Data and terms
 
-Aircraft data comes from [adsb.fi](https://adsb.fi), whose open data is for personal, noncommercial use and requires attribution, which the dashboard shows. Check the terms before any newsroom or commercial use. Weather comes from the [National Weather Service API](https://www.weather.gov/documentation/services-web-api) (US only, public domain), and the LA city limits from the city's Bureau of Engineering. Coverage depends on volunteer receivers; aircraft can be missing, late or misidentified, and an empty map is not proof of an empty sky.
+Airspace uses adsb.fi open data for personal, noncommercial tracking and credits the source on the dashboard. Review the provider's terms before using recordings for newsroom work or publication. Receiver coverage varies, and aircraft can be missing or late. [adsb.fi open data terms](https://github.com/adsbfi/opendata/blob/main/README.md#terms)
+
+Weather comes from the [National Weather Service](https://www.weather.gov/documentation/services-web-api) in the US. The bundled Los Angeles city boundary comes from the city's Bureau of Engineering.
 
 ## License
 

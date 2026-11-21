@@ -256,13 +256,13 @@ data_dir = "data"
 retention_days = 7
 
 [enrich]
-# hangarbay's FAA registry; delete this line to disable lookups
+# Optional FAA registry. Lookups use this database when DuckDB is installed (the enrich extra).
 hangarbay_db = "~/.hangarbay/data/publish/registry.duckdb"
 # Operator and role catalogs: CSV files or directories of them
 catalogs = ["catalogs"]
 
 [display]
-# Frame this radius around home on load and resize; unset frames the visible area
+# Frame this radius around home. If unset, use the visible radius plus 8%.
 # view_radius_mi = 6.0
 # Draw the Los Angeles city limits
 show_la_boundary = false

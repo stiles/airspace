@@ -1,18 +1,32 @@
 # Exports
 
-Airspace exports recorded observations with their source and timestamp provenance. Exports never include the home coordinates or distances from home, though the positions themselves show the general area.
+Airspace exports recorded observations with their source and timestamps. The export omits the configured home point and distances from home. Aircraft positions still reveal where they flew.
+
+## Download an export
+
+In the expanded dashboard, open **Export** in the replay bar for the selected session's tracks, points or JSON observations. Select a current aircraft on the map or in the list to download its tracks from the detail panel. Both paths use the available records for that session regardless of the replay playhead, display filters or map view.
+
+Use `airspace sessions` to find a session ID, or `--session latest` to use the newest session, including one still recording. The CLI defaults to `latest` and writes GeoJSON tracks unless you choose a different format.
 
 ```bash
-uv run airspace export --session 1                                # tracks as GeoJSON
-uv run airspace export --session 1 --geometry points              # one point per observation
-uv run airspace export --session 1 --format json                  # observations with field definitions
-uv run airspace export --session 1 --aircraft a1f0d8 --start 2026-10-17T20:15:00Z --end 2026-10-17T20:45:00Z
-uv run airspace export --session 1 --format flighttracer --aircraft a1f0d8 -o n224la/
+uv run airspace sessions
+uv run airspace export --session latest -o tracks.geojson
+uv run airspace export --session 1 --format json \
+  --aircraft a1f0d8 --aircraft a1f48f \
+  --start 2026-10-17T20:15:00Z --end 2026-10-17T20:45:00Z -o observations.json
+uv run airspace export --session latest --geometry behaviors -o behaviors.geojson
 ```
 
-The same exports (except FlightTracer) are available at `GET /api/sessions/{id}/export?format=geojson|json&geometry=tracks|points&aircraft=&start=&end=`. The dashboard links to them from the replay bar and the aircraft detail panel.
+`--aircraft` accepts case-insensitive provider aircraft IDs, usually ICAO hex addresses. Repeat it to include multiple aircraft. `--start` and `--end` are inclusive bounds on `received_at`. Include a timezone in each timestamp, such as `Z` for UTC. The CLI writes to a file named for the session and format by default. An existing output file is replaced.
 
-`start` and `end` filter on `received_at`, the local receipt time. `aircraft` takes provider aircraft IDs (ICAO hex, case-insensitive).
+For scripted downloads, `GET /api/sessions/{id}/export` takes a numeric session ID. It accepts `format=geojson` or `format=json`, `geometry=tracks`, `geometry=points` or `geometry=behaviors` for GeoJSON, and optional `start`, `end` and comma-separated `aircraft` query parameters. Use the CLI for a [FlightTracer run folder](#flighttracer-run-folder).
+
+```bash
+curl --fail --get 'http://127.0.0.1:8000/api/sessions/1/export' \
+  --data-urlencode 'geometry=points' \
+  --data-urlencode 'aircraft=a1f0d8,a1f48f' \
+  -o points.geojson
+```
 
 ## Metadata
 
@@ -26,55 +40,61 @@ Every export carries a `metadata` object. In GeoJSON it's a foreign member, whic
 | `collection` | Poll interval, collection radius and visible radius. `home` is always `"omitted from exports"` |
 | `range`, `filters` | The requested time range and aircraft |
 | `timestamps` | How `received_at` and `position_at` are defined |
-| `coverage_gaps` | Failed polls and host sleep in the range. Missing aircraft during a gap are a coverage problem, not an empty sky |
+| `coverage_gaps` | Failed polls and host sleep logged in the requested range |
+
+Aircraft classifications and operator matches use the catalog and FAA registry available at export time. Check `coverage_gaps` before treating an interval without positions as evidence about traffic.
 
 ## JSON (`--format json`)
 
-`{"metadata": ..., "fields": ..., "observations": [...]}`. Each observation has the normalized fields below, plus `classification`, `classification_rule` and the operator fields. `fields` holds these definitions in machine-readable form.
+The top-level keys are `metadata`, `fields` and `observations`. The `fields` object provides field definitions for the observations.
 
 | Field | Meaning |
 | --- | --- |
 | `aircraft_id` | ICAO address in lowercase hex. A leading `~` marks a non-ICAO address such as a TIS-B track file |
 | `received_at` | UTC time the local collector received the response |
 | `provider_at` | UTC response time reported by the provider |
-| `position_at` | `provider_at` minus the provider's reported position age. Null if unknown |
+| `position_at` | Position time. For adsb.fi, `provider_at` minus the reported position age. Null when unknown |
 | `position_time_basis` | `derived_age`, `explicit` or `unknown` |
+| `time_flag` | `future_position` if the provider reported a position too far in the future. Otherwise null |
 | `new_position` | False for repeated (cached) or out-of-order positions |
 | `latitude`, `longitude` | WGS84 degrees |
-| `altitude_baro_ft` | Barometric altitude in feet; not height above ground. Null on the ground |
+| `altitude_baro_ft` | Barometric altitude in feet above sea level. Null on the ground or when missing |
 | `altitude_geom_ft` | GNSS altitude in feet |
 | `on_ground` | True, false or null |
-| `ground_speed_kt`, `track_deg`, `vertical_rate_fpm` | Movement; track is not necessarily heading |
-| `callsign`, `registration`, `aircraft_type`, `aircraft_description`, `category` | Identification; null when unknown |
+| `ground_speed_kt`, `track_deg`, `vertical_rate_fpm` | Ground speed in knots, true ground track in degrees and vertical rate in feet per minute |
+| `callsign`, `registration`, `aircraft_type`, `aircraft_description`, `category` | Identification. Null when unknown |
 | `position_source` | `adsb_icao`, `adsr_icao`, `mlat`, `tisb_trackfile` and so on |
 | `owner_operator` | As reported, except null when the FAA registry lists individuals as owners (role `private`) |
 | `squawk`, `emergency` | As reported |
 | `classification`, `classification_rule` | `rotorcraft`, `gyroplane`, `surface`, `aircraft` or `unknown`, and the rule that produced it (`adsb_category`, `faa_registry`, `none`) |
-| `operator`, `operator_short`, `role`, `role_rule` | From the operator catalog: e.g. `LAPD Air Support Division`, `LAPD`, `police`, and how it matched (`catalog_hex`, `catalog_registration`, `catalog_callsign`, `owner_pattern`, `registry_owner_type`). Null when unidentified; `operator` is null for private owners |
+| `operator`, `operator_short`, `role`, `role_rule` | Operator name, short label, role and identification rule. Rules include `catalog_hex`, `catalog_registration`, `catalog_callsign`, `owner_pattern` and `registry_owner_type`. `operator` is null for private owners |
 
 ## GeoJSON tracks (default)
 
-One feature per continuous track segment per aircraft, built from new positions only, ordered by `position_at`. A segment ends at a gap longer than the trail gap threshold (30 seconds by default) or an implied speed above 800 knots. Gaps are never joined into one line. A segment with a single position is a Point.
+One feature per continuous track segment per aircraft. Tracks use new positions with a known `position_at`, in timestamp order. A new segment begins after a gap longer than `freshness.trail_gap_s` (30 seconds by default) or an implied speed above 800 knots. A segment with one position is a Point.
 
-Properties: `aircraft_id`, `segment`, `registration`, `callsigns`, `aircraft_type`, `aircraft_description`, `classification`, `classification_rule`, `operator`, `operator_short`, `role`, `role_rule`, `start`, `end`, `points`, `coordinate_times` and `altitudes_baro_ft`. The last two are parallel to the coordinates; `coordinate_times` follows the togeojson `coordTimes` convention. There is also `position_sources`.
+Each feature has a one-based `segment` number, aircraft and operator fields, `callsigns` and `position_sources`. `start` and `end` give the first and last position times, and `points` gives the number of positions. The `coordinate_times` and `altitudes_baro_ft` arrays follow the geometry's coordinate order.
 
 ## GeoJSON points
 
-One Point per observation, including repeated positions (`new_position: false`), with every field above as properties.
+One Point per observation, including repeated positions (`new_position: false`). Latitude and longitude go in the `[longitude, latitude]` geometry. The other observation fields go in `properties`.
 
 ## FlightTracer run folder
 
-`--format flighttracer` writes a folder that [FlightTracer](https://github.com/stiles/flight-tracer)'s `render` command reads (checked against v0.4.2):
+`--format flighttracer` takes exactly one `--aircraft` and writes two files to a folder for [FlightTracer](https://github.com/stiles/flight-tracer).
 
-- `trace.csv` holds one aircraft's airborne new positions, in FlightTracer's column order. `altitude` is barometric. `leg_id` is 1 and `leg_detection` is `unmarked`, because Airspace doesn't detect separate flights; FlightTracer dashes long gaps itself. `is_stale` marks positions older than the fade threshold (20 seconds) when received.
+- `trace.csv` holds new positions with timestamps, excluding points flagged as on the ground. `altitude` is barometric. All rows use `leg_id = 1` and `leg_detection = unmarked`. `is_stale` marks positions older than `freshness.fade_s` when received.
 - `airspace.json` holds the provenance metadata.
 
 ```bash
+uv run airspace export --session 1 --format flighttracer --aircraft a1f0d8 -o n224la/
 flight-tracer render n224la/
 ```
 
-FlightTracer currently hardcodes "Source: ADS-B Exchange" on its images. For adsb.fi data that credit is wrong, and adsb.fi's terms require citing adsb.fi. Correct the source line before using a rendered image anywhere.
+The compatibility check used FlightTracer v0.4.2, which credits ADS-B Exchange on its images. Check the rendered credit against the source in `airspace.json` and credit adsb.fi when rendering its data.
 
 ## GeoJSON behaviors
 
-`airspace export --geometry behaviors` (or `geometry=behaviors` on the API) writes one Point per circling, hovering or low-flight episode, at its center. Properties: `aircraft_id`, `registration`, `callsigns`, `classification`, `operator`, `operator_short`, `role`, `behavior`, `start`, `end`, `duration_s`, `turns` (circling), `radius_m` (median distance from the center), `altitude_baro_ft` (median) and `points`. The metadata's `behavior_rules` states the thresholds used. Behaviors are inferred from positions and describe the track, not the reason for it; there are no distances from home.
+`--geometry behaviors` (or `geometry=behaviors` on the API) writes one Point at the center of each inferred circling, hovering or low-flight episode. Features include aircraft and operator fields, `behavior`, `start`, `end`, `duration_s`, `turns` for circling, `radius_m` (median distance from the center), median `altitude_baro_ft` and `points`.
+
+Airspace detects episodes from the observations in the export window. A time filter can shorten or exclude an episode near the edge of that window. The `behavior_rules` metadata describes the inference thresholds. A behavior describes the shape or altitude of the observed track.
