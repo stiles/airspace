@@ -23,10 +23,14 @@
     /** Compact mode: no detail panel, so the selection keeps its hover card open */
     compact?: boolean;
     outlines?: Outlines | null;
+    outlineNames?: string[];
+    readOnly?: boolean;
   }
 
-  let { aircraft, area, selectedId, highlightedId, listSelection, onselect, onhighlight, compact = false, outlines = null }: Props =
-    $props();
+  let {
+    aircraft, area, selectedId, highlightedId, listSelection, onselect, onhighlight,
+    compact = false, outlines = null, outlineNames = [], readOnly = false,
+  }: Props = $props();
 
   const TOKEN = MAPBOX_TOKEN;
 
@@ -70,9 +74,6 @@
   const tipLeft = $derived(tipPoint !== null && tipPoint.x > width - 230);
   const tipY = $derived(tipPoint ? Math.min(Math.max(tipPoint.y, 44), Math.max(44, height - 44)) : 0);
   const visibleLabel = $derived(area ? miles(area.visible_radius_m) : '');
-  const outlineNames = $derived([
-    ...new Set((outlines?.features ?? []).map((f) => f.properties?.name ?? 'Boundary')),
-  ]);
 
   function source(id: string): GeoJSONSource | undefined {
     return map?.getSource(id) as GeoJSONSource | undefined;
@@ -304,6 +305,12 @@
       },
     });
 
+    m.on('zoomend', () => {
+      const a = untrack(() => area);
+      if (a) updateRingLabels(m, [a.home.longitude, a.home.latitude]);
+    });
+    if (readOnly) return;
+
     m.on('click', (e) => {
       const hit = m.queryRenderedFeatures(e.point, { layers: ['aircraft'] })[0];
       onselect(hit ? String(hit.properties?.id) : null);
@@ -314,10 +321,6 @@
     });
     m.on('mouseleave', 'aircraft', () => setHoveredAircraft(null));
     m.on('move', () => view++);
-    m.on('zoomend', () => {
-      const a = untrack(() => area);
-      if (a) updateRingLabels(m, [a.home.longitude, a.home.latitude]);
-    });
     // Camera moves from fitBounds carry no originalEvent; drags, scrolls and the zoom buttons do
     m.on('movestart', (e) => {
       if ((e as { originalEvent?: unknown }).originalEvent) userMoved = true;
@@ -337,10 +340,15 @@
       pitchWithRotate: false,
       dragRotate: false, // north-up
       touchPitch: false,
-      attributionControl: true,
+      interactive: !readOnly,
+      attributionControl: !readOnly,
     });
-    map.touchZoomRotate.disableRotation();
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    if (readOnly) {
+      map.addControl(new mapboxgl.AttributionControl({ compact: false }));
+    } else {
+      map.touchZoomRotate.disableRotation();
+      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    }
     map.on('load', () => {
       addLayers(map!);
       ready = true;
@@ -436,14 +444,16 @@
 <div class="map-wrap" bind:clientWidth={width} bind:clientHeight={height}>
   {#if TOKEN}
     <div class="map" bind:this={container} data-testid="map"></div>
-    <button class="recenter" type="button" onclick={recenter} aria-label="Recenter on home area">Recenter</button>
-    {#if area}
-      <!-- Remount on layout change so each layout keeps its own open/closed choice -->
-      {#key compact}
-        <Legend {visibleLabel} {compact} {outlineNames} />
-      {/key}
+    {#if !readOnly}
+      <button class="recenter" type="button" onclick={recenter} aria-label="Recenter on home area">Recenter</button>
+      {#if area}
+        <!-- Remount on layout change so each layout keeps its own open/closed choice -->
+        {#key compact}
+          <Legend {visibleLabel} {compact} {outlineNames} />
+        {/key}
+      {/if}
     {/if}
-    {#if tip && tipPoint}
+    {#if !readOnly && tip && tipPoint}
       <div
         class="tooltip"
         class:left={tipLeft}

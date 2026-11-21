@@ -136,7 +136,7 @@ def test_weather_view_radius_and_outlines(config, fixture_bytes):
         {
             **config.model_dump(),
             "weather": {"enabled": True, "station": "KSMO"},
-            "display": {"view_radius_mi": 6, "show_la_boundary": True, "text_scale": 1.5},
+            "display": {"view_radius_mi": 6, "show_la_boundary": True, "text_scale": 1.5, "tv_display": True},
         }
     )
     app = create_app(config, transport=httpx.MockTransport(handler), clock=fast_clock())
@@ -149,6 +149,7 @@ def test_weather_view_radius_and_outlines(config, fixture_bytes):
         assert weather["status"] in ("ok", "stale")  # depends on how old the fixture is
         assert client.get("/api/health").json()["weather"] == weather["status"]
         assert round(state["area"]["view_radius_m"]) == 9656 and state["area"]["text_scale"] == 1.5
+        assert state["area"]["tv_display"] is True
         outlines = client.get("/api/outlines").json()
         assert outlines["features"][0]["properties"]["name"] == "Los Angeles city limits"
 
@@ -158,6 +159,7 @@ def test_weather_off_and_no_outlines_by_default(config, ok_transport):
         wait_for(lambda: ok_transport.calls >= 1)
         state = client.get("/api/state").json()
         assert state["weather"] is None and state["area"]["view_radius_m"] is None
+        assert state["area"]["tv_display"] is False
         assert client.get("/api/health").json()["weather"] == "off"
         assert client.get("/api/outlines").json() == {"type": "FeatureCollection", "features": []}
 

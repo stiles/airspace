@@ -72,5 +72,6 @@ export class FakeMap {
 }
 
 export class NavigationControl {}
+export class AttributionControl {}
 
-export default { Map: FakeMap, NavigationControl, accessToken: '' };
+export default { Map: FakeMap, NavigationControl, AttributionControl, accessToken: '' };

@@ -15,6 +15,7 @@ Restart `airspace serve`, `collect` or `replay` after changing TOML settings. Re
 | `display.view_radius_mi` | Unset | Camera radius in statute miles. When omitted, the map frames the home radius plus 8% |
 | `display.show_la_boundary`, `display.outlines` | `false`, `[]` | Turn on the bundled LA boundary or add GeoJSON line or polygon files in longitude, latitude order |
 | `display.text_scale` | 1 | Header, sidebar, legend and weather text scale from 0.75 to 3. Try 1.5 on a monitor across the room |
+| `display.tv_display` | `false` | Show the live map, aircraft list, weather and legend on an unattended monitor. Hides playback, layout, filter and map controls |
 | `display.show_filters` | `true` | Set to `false` to hide the controls while keeping the configured starting filters |
 
 For a 10-mile list and matching home framing, use these values in your existing sections.

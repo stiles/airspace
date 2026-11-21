@@ -6,11 +6,12 @@
     visibleLabel,
     compact = false,
     outlineNames = [],
-  }: { visibleLabel: string; compact?: boolean; outlineNames?: string[] } = $props();
+    readOnly = false,
+  }: { visibleLabel: string; compact?: boolean; outlineNames?: string[]; readOnly?: boolean } = $props();
 
   // The map remounts the legend when the layout changes. The old desktop key stored its open default.
   const key = untrack(() => (compact ? 'legend-compact' : 'legend-expanded'));
-  const initiallyOpen = loadPref(key, false);
+  const initiallyOpen = untrack(() => !readOnly && loadPref(key, false));
 
   function toggle(e: Event) {
     savePref(key, (e.currentTarget as HTMLDetailsElement).open);
@@ -24,8 +25,7 @@
   <svg viewBox="0 0 64 64" class="sym {cls}" aria-hidden="true"><path d={PLANE} /></svg>
 {/snippet}
 
-<details class="legend" open={initiallyOpen} ontoggle={toggle} data-testid="legend">
-  <summary>Legend</summary>
+{#snippet entries()}
   <ul>
     <li>{@render plane('aircraft')} Airplane</li>
     <li>
@@ -43,28 +43,42 @@
         <circle cx="32" cy="32" r="9" />
         <circle cx="32" cy="32" r="17" class="outline" />
       </svg>
-      No track reported
+      {readOnly ? 'No track' : 'No track reported'}
     </li>
     <li>{@render plane('aircraft fading')} Position aging</li>
-    <li>
-      <svg viewBox="0 0 64 64" class="sym selected" aria-hidden="true">
-        <circle cx="32" cy="32" r="26" class="outline" />
-        <path d={PLANE} transform="translate(13 13) scale(0.6)" />
-      </svg>
-      Selected
-    </li>
+    {#if !readOnly}
+      <li>
+        <svg viewBox="0 0 64 64" class="sym selected" aria-hidden="true">
+          <circle cx="32" cy="32" r="26" class="outline" />
+          <path d={PLANE} transform="translate(13 13) scale(0.6)" />
+        </svg>
+        Selected
+      </li>
+    {/if}
     <li><i class="line trail" aria-hidden="true"></i> Recent track</li>
-    <li><i class="orbit" aria-hidden="true"></i> Circling or hovering (inferred)</li>
+    <li><i class="orbit" aria-hidden="true"></i> {readOnly ? 'Orbit or hover' : 'Circling or hovering (inferred)'}</li>
     <li class="gap"><i class="dot" aria-hidden="true"></i> Home</li>
     <li><i class="line ring" aria-hidden="true"></i> 1-mile rings</li>
-    <li><i class="line visible" aria-hidden="true"></i> Home radius, {visibleLabel}</li>
+    <li><i class="line visible" aria-hidden="true"></i> {readOnly ? `Home ring ${visibleLabel}` : `Home radius, ${visibleLabel}`}</li>
     <li><i class="line collection" aria-hidden="true"></i> Collection limit</li>
     {#each outlineNames as name (name)}
       <li><i class="line outline" aria-hidden="true"></i> {name}</li>
     {/each}
-    <li><span class="alt" aria-hidden="true">015</span> 1,500 ft (barometric)</li>
+    <li><span class="alt" aria-hidden="true">015</span> {readOnly ? '1,500 ft baro' : '1,500 ft (barometric)'}</li>
   </ul>
-</details>
+{/snippet}
+
+{#if readOnly}
+  <section class="static-legend" data-testid="legend">
+    <h2>Legend</h2>
+    {@render entries()}
+  </section>
+{:else}
+  <details class="legend" open={initiallyOpen} ontoggle={toggle} data-testid="legend">
+    <summary>Legend</summary>
+    {@render entries()}
+  </details>
+{/if}
 
 <style>
   .legend {
@@ -81,6 +95,48 @@
     background: rgba(5, 12, 8, 0.88);
     color: var(--text-soft);
     font-size: 12px;
+  }
+  .static-legend {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text-soft);
+    font-size: 12px;
+    zoom: var(--ui-scale, 1);
+  }
+  .static-legend h2 {
+    margin: 0;
+    padding-top: 2px;
+    color: var(--muted-strong);
+    font-size: inherit;
+    font-weight: 600;
+  }
+  .static-legend ul {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 100px), 1fr));
+    gap: 2px 10px;
+    padding: 0;
+  }
+  .static-legend li {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .static-legend li.gap {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  @media (max-height: 540px) {
+    .static-legend {
+      padding-block: 3px;
+    }
+    .static-legend ul {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 80px), 1fr));
+      column-gap: 6px;
+    }
   }
   summary {
     padding: 5px 10px;

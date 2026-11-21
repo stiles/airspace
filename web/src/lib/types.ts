@@ -116,6 +116,8 @@ export interface Snapshot {
     view_radius_m?: number | null;
     /** Enlarges the interface around the map, e.g. 1.5 on a TV */
     text_scale?: number;
+    /** Show the live dashboard as a read-only wall display */
+    tv_display?: boolean;
     /** False hides the altitude menu and checkboxes; `filters` then stays fixed */
     show_filters?: boolean;
     filters?: ConfigFilters;

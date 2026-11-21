@@ -73,7 +73,7 @@ The script pulls with `git pull --ff-only`, runs `uv sync --locked`, rebuilds wi
 | Code or frontend files in Git | Run `./scripts/update-pi.sh` |
 | Systemd unit template or autostart settings | Rerun `./scripts/install-pi-kiosk.sh` |
 
-For a wall display, set `view_radius_mi` under `[display]` to frame the desired area. Choose the starting filters under `[filters]`, then set `show_filters = false` under `[display]` if the screen has no keyboard or mouse. [Home, range and display settings](configuration.md#home-range-and-display)
+For a wall display, add `tv_display = true` to the existing `[display]` section in the Pi's `airspace.toml`. The weather stays visible above the aircraft list, and the legend runs along the bottom. Set `view_radius_mi` to frame the area and `text_scale` to adjust readability from across the room. The live view uses the filters from `[filters]`. [Home, range and display settings](configuration.md#home-range-and-display)
 
 ## Troubleshoot
 

@@ -10,10 +10,31 @@
     onselect: (id: string) => void;
     onhover: (id: string | null) => void;
     onfocusaircraft: (id: string | null) => void;
+    readOnly?: boolean;
   }
 
-  let { aircraft, selectedId, highlightedId, emptyMessage, onselect, onhover, onfocusaircraft }: Props = $props();
+  let {
+    aircraft, selectedId, highlightedId, emptyMessage, onselect, onhover, onfocusaircraft, readOnly = false,
+  }: Props = $props();
 </script>
+
+{#snippet cells(a: Aircraft)}
+  <span class="kind {a.class}" aria-hidden="true"></span>
+  <span class="name">
+    <span class="id">
+      <strong>{identity(a)}</strong>
+      {#if operatorTag(a)}
+        <span class="tag role-{a.role}" title={a.operator ?? undefined}>{operatorTag(a)}</span>
+      {/if}
+      {#each a.behaviors as b (b.kind)}
+        <span class="behavior" data-testid="behavior-chip">{behaviorChip(b)}</span>
+      {/each}
+    </span>
+    <span class="type">{a.description ?? a.aircraft_type ?? 'Type unknown'}</span>
+  </span>
+  <span class="alt">{altitude(a)}</span>
+  <span class="dist">{miles(a.distance_m)} {cardinal(a.bearing_deg)}</span>
+{/snippet}
 
 {#if aircraft.length === 0}
   <p class="empty" data-testid="list-empty">{emptyMessage}</p>
@@ -21,39 +42,30 @@
   <ul class="list" aria-label="Aircraft by distance" data-testid="aircraft-list">
     {#each aircraft as a (a.id)}
       <li>
-        <button
-          type="button"
-          class:selected={a.id === selectedId}
-          class:highlighted={a.id === highlightedId}
-          class:fading={a.freshness === 'fading'}
-          aria-pressed={a.id === selectedId}
-          onclick={() => onselect(a.id)}
-          onpointerenter={(event) => {
-            if (event.pointerType !== 'touch') onhover(a.id);
-          }}
-          onpointerleave={(event) => {
-            if (event.pointerType !== 'touch') onhover(null);
-          }}
-          onfocus={() => onfocusaircraft(a.id)}
-          onblur={() => onfocusaircraft(null)}
-          data-id={a.id}
-        >
-          <span class="kind {a.class}" aria-hidden="true"></span>
-          <span class="name">
-            <span class="id">
-              <strong>{identity(a)}</strong>
-              {#if operatorTag(a)}
-                <span class="tag role-{a.role}" title={a.operator ?? undefined}>{operatorTag(a)}</span>
-              {/if}
-              {#each a.behaviors as b (b.kind)}
-                <span class="behavior" data-testid="behavior-chip">{behaviorChip(b)}</span>
-              {/each}
-            </span>
-            <span class="type">{a.description ?? a.aircraft_type ?? 'Type unknown'}</span>
-          </span>
-          <span class="alt">{altitude(a)}</span>
-          <span class="dist">{miles(a.distance_m)} {cardinal(a.bearing_deg)}</span>
-        </button>
+        {#if readOnly}
+          <div class="row" class:fading={a.freshness === 'fading'}>{@render cells(a)}</div>
+        {:else}
+          <button
+            type="button"
+            class="row"
+            class:selected={a.id === selectedId}
+            class:highlighted={a.id === highlightedId}
+            class:fading={a.freshness === 'fading'}
+            aria-pressed={a.id === selectedId}
+            onclick={() => onselect(a.id)}
+            onpointerenter={(event) => {
+              if (event.pointerType !== 'touch') onhover(a.id);
+            }}
+            onpointerleave={(event) => {
+              if (event.pointerType !== 'touch') onhover(null);
+            }}
+            onfocus={() => onfocusaircraft(a.id)}
+            onblur={() => onfocusaircraft(null)}
+            data-id={a.id}
+          >
+            {@render cells(a)}
+          </button>
+        {/if}
       </li>
     {/each}
   </ul>
@@ -65,8 +77,9 @@
     padding: 0;
     list-style: none;
   }
-  button {
+  .row {
     display: grid;
+    box-sizing: border-box;
     grid-template-columns: 10px 1fr auto;
     grid-template-areas: 'kind name alt' 'kind name dist';
     gap: 0 10px;
@@ -79,7 +92,12 @@
     font: inherit;
     font-size: 13px;
     text-align: left;
+  }
+  button.row {
     cursor: pointer;
+  }
+  div.row {
+    padding-block: 6px;
   }
   button.highlighted {
     background: var(--hover);
@@ -89,7 +107,7 @@
     background: var(--selected-bg);
     box-shadow: inset 3px 0 var(--accent);
   }
-  button.fading:not(.highlighted):not(:focus-visible) {
+  .row.fading:not(.highlighted):not(:focus-visible) {
     opacity: 0.55;
   }
   button:focus-visible {

@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Outlines, Snapshot, Weather } from './lib/types';
 import { aircraft, snapshot } from './test/fixtures';
-import { instances } from './test/mapbox-mock';
+import { AttributionControl, instances } from './test/mapbox-mock';
 
 vi.mock('mapbox-gl', () => import('./test/mapbox-mock'));
 vi.mock('mapbox-gl/dist/mapbox-gl.css', () => ({}));
@@ -257,7 +257,7 @@ describe('Replay mode', () => {
   const sessions = [{ id: 1, provider: 'adsbfi', mode: 'collect', started_at: '', ended_at: null, end_reason: null,
                       polls: 4, first_poll_at: null, last_poll_at: null }];
 
-  function router(liveStatus = 200) {
+  function router(liveStatus = 200, tvDisplay = false) {
     const calls: string[] = [];
     const fn = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), 'http://localhost');
@@ -270,7 +270,8 @@ describe('Replay mode', () => {
       if (url.pathname === '/api/sessions/1/timeline') return json(tl);
       if (url.pathname === '/api/replay') {
         const at = url.searchParams.get('at')!;
-        return json(snapshot({ mode: 'replay', replay: { session_id: 1, at, session_start: null, session_end: null } }));
+        const area = { ...snapshot().area, tv_display: tvDisplay };
+        return json(snapshot({ area, mode: 'replay', replay: { session_id: 1, at, session_start: null, session_end: null } }));
       }
       return json({ detail: 'not found' }, 404);
     });
@@ -320,15 +321,17 @@ describe('Replay mode', () => {
     expect(calls.filter((c) => c === '/api/state').length).toBeGreaterThan(liveCalls);
   });
 
-  it('opens a replay link at the requested moment', async () => {
+  it('opens a replay link at the requested moment with controls even if TV display is configured', async () => {
     window.history.replaceState(null, '', '/?session=1&at=2026-10-17T20:00:10Z');
-    const { fetchFn, calls } = router();
+    const { fetchFn, calls } = router(200, true);
     render(App, { fetchFn, pollMs: POLL });
     await advance(0);
     await advance(0);
     expect(calls).toContain('/api/replay?session_id=1&at=2026-10-17T20%3A00%3A10.000Z');
     expect(calls.some((c) => c === '/api/state')).toBe(false);
     expect(screen.getByTestId('scrubber')).toHaveAttribute('aria-valuenow', String(T + 10_000));
+    expect(map().options.interactive).toBe(true);
+    expect(screen.getByRole('button', { name: /recenter/i })).toBeInTheDocument();
   });
 
   it('labels use the style font and the detail panel links to an export', async () => {
@@ -443,7 +446,7 @@ describe('Map extras', () => {
     await fireEvent.click(screen.getByTestId('compact-toggle'));
     expect(screen.queryByTestId('aircraft-list')).toBeNull();
     expect(screen.getByTestId('map')).toBeInTheDocument();
-    expect(screen.getByText(/personal, noncommercial use/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'adsb.fi' })).toHaveAttribute('href', 'https://adsb.fi');
     expect(screen.getByTestId('feed-status')).toBeInTheDocument();
     expect(localStorage.getItem('airspace:compact')).toBe('1');
     // Folded by default in compact
@@ -674,6 +677,49 @@ describe('Behaviors', () => {
       render(App, { fetchFn: server([snapshot({ area: { ...base.area, text_scale: 1.5 } })]), pollMs: 60_000 });
       await advance(0);
       expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.5');
+    });
+
+    it('keeps TV weather, legend and aircraft visible while removing controls', async () => {
+      localStorage.setItem('airspace:compact', '1');
+      const base = snapshot();
+      const area = {
+        ...base.area,
+        tv_display: true,
+        show_filters: true,
+        filters: { ...base.area.filters!, max_altitude_baro_ft: 2000 },
+      };
+      const updated = { ...heli, altitude_baro_ft: 1900 };
+      const fetchFn = server([
+        snapshot({ area, aircraft: [heli, jet], weather }),
+        snapshot({ area, aircraft: [updated, jet], weather }),
+      ], city);
+      render(App, { fetchFn, pollMs: POLL });
+      await advance(0);
+
+      expect(screen.queryAllByRole('button')).toEqual([]);
+      expect(screen.queryByTestId('altitude-filter')).toBeNull();
+      expect(screen.getByTestId('feed-status')).toHaveTextContent('Live');
+      const aside = within(screen.getByRole('complementary'));
+      const legend = screen.getByTestId('legend');
+      const card = aside.getByTestId('weather');
+      expect(legend).toHaveTextContent('Los Angeles city limits');
+      expect(card).toHaveTextContent('Wind SW 15 mph, gusts 21');
+      expect(card).toHaveTextContent('Visibility 10 mi, no ceiling');
+      expect(legend.querySelector('summary')).toBeNull();
+      expect(card.querySelector('summary')).toBeNull();
+      const list = aside.getByTestId('aircraft-list');
+      expect(list).toHaveTextContent('N225LA');
+      expect(list).not.toHaveTextContent('UAL2113');
+      expect(instances).toHaveLength(1);
+      const m = map();
+      expect(m.options.interactive).toBe(false);
+      expect(m.handlers.has('click')).toBe(false);
+      expect(m.addControl).toHaveBeenCalledExactlyOnceWith(expect.any(AttributionControl));
+      expect(m.fitBounds).toHaveBeenCalled();
+
+      await advance(POLL);
+      expect(list).toHaveTextContent('1,900 ft');
+      expect(instances).toHaveLength(1);
     });
 
     it('hides the filter controls and applies the configured filters', async () => {

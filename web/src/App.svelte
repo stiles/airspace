@@ -5,6 +5,7 @@
   import DetailPanel from './components/DetailPanel.svelte';
   import FeedStatus from './components/FeedStatus.svelte';
   import FiltersPanel from './components/Filters.svelte';
+  import Legend from './components/Legend.svelte';
   import MapView from './components/Map.svelte';
   import Timeline from './components/Timeline.svelte';
   import WeatherCard from './components/WeatherCard.svelte';
@@ -44,13 +45,13 @@
   let filters = $state<Filters>(defaultFilters());
   let filtersInitialized = false;
   // Map-only layout for a small always-on window; small windows start compact
-  let compact = $state(loadPref('compact', window.innerWidth < 560 || window.innerHeight < 420));
+  let compactPreference = $state(loadPref('compact', window.innerWidth < 560 || window.innerHeight < 420));
 
   function toggleCompact() {
-    compact = !compact;
+    compactPreference = !compactPreference;
     rowHoverId = null;
     rowFocusId = null;
-    savePref('compact', compact);
+    savePref('compact', compactPreference);
   }
 
   const replay = new ReplayController({
@@ -61,6 +62,10 @@
 
   const snapshot = $derived(mode === 'live' ? liveSnapshot : replay.snapshot);
   const error = $derived(mode === 'live' ? liveError : replay.error);
+  const tvDisplay = $derived(mode === 'live' && liveSnapshot?.area.tv_display === true);
+  const compact = $derived(!tvDisplay && compactPreference);
+  const displayReady = $derived(liveSnapshot !== null || replay.snapshot !== null || error !== null);
+  const showControls = $derived(displayReady && !tvDisplay);
   // Seconds since the live snapshot arrived; a replayed moment doesn't age
   const elapsedS = $derived(mode === 'live' && snapshot ? Math.max(0, (now - fetchedAt) / 1000) : 0);
   const aged = $derived(snapshot ? ageAircraft(snapshot.aircraft, elapsedS, snapshot.thresholds) : []);
@@ -80,6 +85,9 @@
     !selected && selectedId ? (snapshot?.last_seen.find((a) => a.id === selectedId) ?? null) : null,
   );
   const visibleLabel = $derived(snapshot ? miles(snapshot.area.visible_radius_m) : 'visible area');
+  const outlineNames = $derived([
+    ...new Set((outlines?.features ?? []).map((f) => f.properties?.name ?? 'Boundary')),
+  ]);
   const attribution = $derived(snapshot?.source);
   const title = $derived(snapshot?.area.home.title || 'Airspace');
   $effect(() => {
@@ -201,47 +209,55 @@
   {/if}
 {/snippet}
 
-<div class="app" class:compact>
+<div class="app" class:compact class:tv-display={tvDisplay}>
   <header class="bar">
     <h1>{title}</h1>
-    {#if !replayOnly}
+    {#if showControls && !replayOnly}
       <div class="modes" role="group" aria-label="Mode">
         <button type="button" aria-pressed={mode === 'live'} onclick={enterLive}>Live</button>
         <button type="button" aria-pressed={mode === 'replay'} onclick={() => mode !== 'replay' && enterReplay()}>Replay</button>
       </div>
     {/if}
     <FeedStatus {view} />
-    <div class="right">
-    {#if compact && snapshot && !view.untrusted}
-      <span class="count" data-testid="count">
-        {listed.length} aircraft{filters.listVisibleOnly ? ` within ${visibleLabel}` : ''}
-      </span>
+    {#if showControls}
+      <div class="right">
+        {#if compact && snapshot && !view.untrusted}
+          <span class="count" data-testid="count">
+            {listed.length} aircraft{filters.listVisibleOnly ? ` within ${visibleLabel}` : ''}
+          </span>
+        {/if}
+        <button
+          type="button"
+          class="layout"
+          aria-pressed={compact}
+          onclick={toggleCompact}
+          title={compact ? 'Show the list and filters' : 'Map only, for a small window'}
+          data-testid="compact-toggle">{compact ? 'Expand' : 'Compact'}</button
+        >
+      </div>
     {/if}
-    <button
-      type="button"
-      class="layout"
-      aria-pressed={compact}
-      onclick={toggleCompact}
-      title={compact ? 'Show the list and filters' : 'Map only, for a small window'}
-      data-testid="compact-toggle">{compact ? 'Expand' : 'Compact'}</button
-    >
-    </div>
   </header>
 
   <main>
     <div class="map-column">
       <div class="map-pane" class:untrusted={view.untrusted}>
-        <MapView
-          aircraft={onMap}
-          area={snapshot?.area ?? null}
-          {selectedId}
-          {highlightedId}
-          {listSelection}
-          onselect={select}
-          onhighlight={(id) => (mapHoverId = id)}
-          {compact}
-          {outlines}
-        />
+        {#if displayReady}
+          {#key tvDisplay}
+            <MapView
+              aircraft={onMap}
+              area={snapshot?.area ?? null}
+              selectedId={tvDisplay ? null : selectedId}
+              highlightedId={tvDisplay ? null : highlightedId}
+              listSelection={tvDisplay ? null : listSelection}
+              onselect={select}
+              onhighlight={(id) => (mapHoverId = id)}
+              {compact}
+              {outlines}
+              {outlineNames}
+              readOnly={tvDisplay}
+            />
+          {/key}
+        {/if}
       </div>
       {#if compact && weather}
         <WeatherCard {weather} {now} {compact} />
@@ -254,22 +270,27 @@
       <footer class="credit-bar">{@render credit()}</footer>
     {:else}
       <aside>
-        {#if snapshot?.area.show_filters !== false}
+        {#if tvDisplay && weather}
+          <WeatherCard {weather} {now} readOnly />
+        {/if}
+        {#if showControls && snapshot?.area.show_filters !== false}
           <FiltersPanel
             bind:filters
             {visibleLabel}
             configuredAltitude={snapshot?.area.filters?.max_altitude_baro_ft ?? null}
           />
         {/if}
-        <DetailPanel
-          aircraft={selected}
-          lastSeen={selectedLastSeen}
-          hiddenByFilters={selected !== null && !passes(selected, filters)}
-          exportHref={sessionId !== null && selectedId ? exportUrl(sessionId, { aircraft: selectedId }) : null}
-          onclose={() => select(null)}
-        />
+        {#if !tvDisplay}
+          <DetailPanel
+            aircraft={selected}
+            lastSeen={selectedLastSeen}
+            hiddenByFilters={selected !== null && !passes(selected, filters)}
+            exportHref={sessionId !== null && selectedId ? exportUrl(sessionId, { aircraft: selectedId }) : null}
+            onclose={() => select(null)}
+          />
+        {/if}
         <div class="list-wrap">
-          {#if !view.untrusted}
+          {#if !tvDisplay && !view.untrusted}
             <Activity aircraft={listed} onselect={selectFromList} />
           {/if}
           <h2 class="list-heading">
@@ -290,15 +311,19 @@
             onselect={selectFromList}
             onhover={(id) => (rowHoverId = id)}
             onfocusaircraft={(id) => (rowFocusId = id)}
+            readOnly={tvDisplay}
           />
         </div>
-        {#if weather}
+        {#if !tvDisplay && weather}
           <WeatherCard {weather} {now} />
         {/if}
         <footer>{@render credit()}</footer>
       </aside>
     {/if}
   </main>
+  {#if tvDisplay}
+    <Legend {visibleLabel} {outlineNames} readOnly />
+  {/if}
 </div>
 
 <style>
@@ -524,6 +549,17 @@
     min-height: 0;
     overflow-y: auto;
   }
+  .tv-display aside {
+    max-width: 45%;
+  }
+  .tv-display .list-wrap {
+    overflow: clip;
+  }
+  .tv-display .bar,
+  .tv-display .list-heading,
+  .tv-display footer {
+    padding-block: 4px;
+  }
   footer {
     padding: 8px 12px;
     border-top: 1px solid var(--line);
@@ -549,14 +585,14 @@
     padding-bottom: 20px;
   }
   @media (max-width: 760px) {
-    main {
+    .app:not(.tv-display) main {
       flex-direction: column;
     }
-    .map-column {
+    .app:not(.tv-display) .map-column {
       flex: none;
       height: 60vh;
     }
-    aside {
+    .app:not(.tv-display) aside {
       flex: 1;
       width: auto;
       min-height: 0;
@@ -565,7 +601,7 @@
     .bar {
       flex-wrap: wrap;
     }
-    .compact .map-column {
+    .app.compact .map-column {
       flex: 1;
       height: auto;
     }

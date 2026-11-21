@@ -119,6 +119,8 @@ class Display(BaseModel):
     outlines: list[Path] = []
     # Enlarges the header, side panel, weather card and legend (not the map), e.g. 1.5 for a TV
     text_scale: float = Field(default=1.0, ge=0.75, le=3.0)
+    # Use a read-only live dashboard with weather and legend always visible
+    tv_display: bool = False
     # The altitude menu and checkboxes above the list; [filters] sets their starting values
     show_filters: bool = True
 
@@ -270,6 +272,8 @@ show_la_boundary = false
 # outlines = ["path/to/boundary.geojson"]
 # Larger header, side panel, weather card and legend, e.g. 1.5 for a TV across the room
 # text_scale = 1.0
+# Read-only live dashboard for an unattended monitor
+tv_display = false
 # Show the altitude menu and checkboxes above the list; false fixes the [filters] below
 show_filters = true
 
