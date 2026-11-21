@@ -7,6 +7,8 @@ import { ageAircraft } from './freshness';
 import { aircraftCollection, circle, destination, iconFor, rings, trailCollection } from './geo';
 import { statusView } from './status';
 import { tooltipFor } from './tooltip';
+import { observedAgo, sky, temperature, wind } from './weather';
+import type { Observation } from './types';
 
 describe('format', () => {
   it('keeps zero distinct from unknown', () => {
@@ -193,5 +195,32 @@ describe('tooltip', () => {
   it('flags aging and untimed positions', () => {
     expect(tooltipFor(aircraft({ freshness: 'fading', position_age_s: 42 })).note).toBe('Position 42s old');
     expect(tooltipFor(aircraft({ freshness: 'unknown' })).note).toBe('Position time unknown');
+  });
+});
+
+describe('weather', () => {
+  const obs: Observation = {
+    observed_at: '2026-11-19T23:00:00.000+00:00', description: 'Partly Cloudy', temperature_f: 64, dewpoint_f: 54,
+    humidity_pct: 68, wind_direction_deg: 230, wind_speed_mph: 15, wind_gust_mph: 21, visibility_mi: 10,
+    ceiling_ft: null, clouds: [{ amount: 'FEW', base_ft: 2700 }],
+  };
+  it('describes wind, calm and variable', () => {
+    expect(wind(obs)).toBe('Wind SW 15 mph, gusts 21');
+    expect(wind({ ...obs, wind_speed_mph: 0, wind_gust_mph: null })).toBe('Wind calm');
+    expect(wind({ ...obs, wind_direction_deg: null, wind_gust_mph: null })).toBe('Wind variable 15 mph');
+    expect(wind({ ...obs, wind_speed_mph: null })).toBeNull();
+  });
+  it('reports a ceiling only for broken or overcast layers, and drops missing values', () => {
+    expect(sky(obs)).toBe('Visibility 10 mi, no ceiling');
+    expect(sky({ ...obs, visibility_mi: 1.5, ceiling_ft: 800 })).toBe('Visibility 1.5 mi, ceiling 800 ft');
+    expect(sky({ ...obs, visibility_mi: null, ceiling_ft: 4700 })).toBe('Ceiling 4,700 ft');
+    expect(sky({ ...obs, visibility_mi: null, clouds: null })).toBeNull();
+    expect(temperature({ ...obs, temperature_f: null })).toBeNull();
+    expect(temperature({ ...obs, temperature_f: 0 })).toBe('0°');
+  });
+  it('says how old the observation is', () => {
+    expect(observedAgo(30)).toBe('just now');
+    expect(observedAgo(52 * 60)).toBe('52 min ago');
+    expect(observedAgo(125 * 60)).toBe('2 hr 5 min ago');
   });
 });

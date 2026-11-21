@@ -2,7 +2,11 @@
   import { untrack } from 'svelte';
   import { loadPref, savePref } from '../lib/prefs';
 
-  let { visibleLabel, compact = false }: { visibleLabel: string; compact?: boolean } = $props();
+  let {
+    visibleLabel,
+    compact = false,
+    outlineNames = [],
+  }: { visibleLabel: string; compact?: boolean; outlineNames?: string[] } = $props();
 
   // The map remounts the legend when the layout changes, so the layout is fixed here.
   // Open on a full window, folded in compact mode, unless the user chose otherwise.
@@ -58,6 +62,9 @@
     <li><i class="line ring" aria-hidden="true"></i> 1-mile rings</li>
     <li><i class="line visible" aria-hidden="true"></i> Visible area, {visibleLabel}</li>
     <li><i class="line collection" aria-hidden="true"></i> Collection limit</li>
+    {#each outlineNames as name (name)}
+      <li><i class="line outline" aria-hidden="true"></i> {name}</li>
+    {/each}
     <li><span class="alt" aria-hidden="true">015</span> 1,500 ft (barometric)</li>
   </ul>
 </details>
@@ -68,7 +75,9 @@
     bottom: 34px;
     left: 10px;
     z-index: 2;
+    /* Under zoom, the percentage resolves against the map and the px offsets scale */
     max-height: calc(100% - 90px);
+    zoom: var(--ui-scale, 1);
     overflow-y: auto;
     border: 1px solid var(--control-line);
     border-radius: 4px;
@@ -146,6 +155,10 @@
   }
   .line.collection {
     border-top-style: dashed;
+  }
+  .line.outline {
+    border-top: 2px solid var(--outline);
+    box-shadow: 0 0 4px var(--outline);
   }
   .orbit {
     flex: none;

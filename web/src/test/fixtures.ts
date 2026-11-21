@@ -61,7 +61,13 @@ export function snapshot(overrides: Partial<Snapshot> = {}, feed: Partial<Feed> 
       home: { latitude: 34.0, longitude: -118.42, label: 'Home', title: 'Airspace' },
       visible_radius_m: 8046.72,
       collection_radius_m: 18520,
-      max_altitude_baro_ft: null,
+      filters: {
+        max_altitude_baro_ft: null,
+        unknown_altitude: true,
+        on_ground: false,
+        surface_vehicles: false,
+        list_visible_only: true,
+      },
     },
     thresholds: { fade_s: 20, hide_s: 60, trail_gap_s: 30, trail_duration_s: 300 },
     feed: {

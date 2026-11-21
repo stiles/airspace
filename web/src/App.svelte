@@ -6,14 +6,15 @@
   import FiltersPanel from './components/Filters.svelte';
   import MapView from './components/Map.svelte';
   import Timeline from './components/Timeline.svelte';
-  import { ApiError, exportUrl, replayTarget, startPolling } from './lib/api';
-  import { applyFilters, defaultFilters, passes, type Filters } from './lib/filters';
+  import WeatherCard from './components/WeatherCard.svelte';
+  import { ApiError, exportUrl, fetchOutlines, replayTarget, startPolling } from './lib/api';
+  import { applyFilters, defaultFilters, fromConfig, passes, type Filters } from './lib/filters';
   import { miles } from './lib/format';
   import { loadPref, savePref } from './lib/prefs';
   import { ageAircraft } from './lib/freshness';
   import { ReplayController } from './lib/replay.svelte';
   import { emptyListMessage, statusView } from './lib/status';
-  import type { Snapshot } from './lib/types';
+  import type { Outlines, Snapshot } from './lib/types';
 
   interface Props {
     fetchFn?: typeof fetch;
@@ -31,6 +32,7 @@
 
   let liveSnapshot = $state<Snapshot | null>(null);
   let liveError = $state<ApiError | null>(null);
+  let outlines = $state<Outlines | null>(null);
   let fetchedAt = $state(0);
   let now = $state(Date.now());
   let selectedId = $state<string | null>(null);
@@ -70,7 +72,13 @@
   $effect(() => {
     document.title = title;
   });
+  const textScale = $derived(snapshot?.area.text_scale ?? 1);
+  $effect(() => {
+    document.documentElement.style.setProperty('--ui-scale', String(textScale));
+  });
   const sessionId = $derived(mode === 'live' ? (liveSnapshot?.session_id ?? null) : replay.sessionId);
+  // Current conditions only; a replayed moment has no weather
+  const weather = $derived(mode === 'live' ? (liveSnapshot?.weather ?? null) : null);
 
   let stopLive: (() => void) | undefined;
   let ticker: ReturnType<typeof setInterval> | undefined;
@@ -83,7 +91,7 @@
 
   function onSnapshot(s: Snapshot) {
     if (!filtersInitialized) {
-      filters.maxAltitudeFt = s.area.max_altitude_baro_ft;
+      filters = fromConfig(s.area.filters);
       filtersInitialized = true;
     }
   }
@@ -135,6 +143,11 @@
     if (target) enterReplay(target.sessionId, Date.parse(target.at));
     else startLive();
     ticker = setInterval(() => (now = Date.now()), tickMs);
+    // Optional decoration: a missing or bad file just leaves the map without outlines
+    fetchOutlines(fetchFn).then(
+      (o) => (outlines = o),
+      () => {},
+    );
   });
 
   onDestroy(() => {
@@ -198,8 +211,11 @@
   <main>
     <div class="map-column">
       <div class="map-pane" class:untrusted={view.untrusted}>
-        <MapView aircraft={onMap} area={snapshot?.area ?? null} {selectedId} onselect={select} {compact} />
+        <MapView aircraft={onMap} area={snapshot?.area ?? null} {selectedId} onselect={select} {compact} {outlines} />
       </div>
+      {#if weather}
+        <WeatherCard {weather} {now} />
+      {/if}
       {#if mode === 'replay'}
         <Timeline {replay} {compact} />
       {/if}
@@ -208,7 +224,13 @@
       <footer class="credit-bar">{@render credit()}</footer>
     {:else}
       <aside>
-        <FiltersPanel bind:filters {visibleLabel} />
+        {#if snapshot?.area.show_filters !== false}
+          <FiltersPanel
+            bind:filters
+            {visibleLabel}
+            configuredAltitude={snapshot?.area.filters?.max_altitude_baro_ft ?? null}
+          />
+        {/if}
         <DetailPanel
           aircraft={selected}
           lastSeen={selectedLastSeen}
@@ -250,6 +272,7 @@
     --faint: #4a705c;
     --phosphor: #3dff8f;
     --accent: #7fe7ff;
+    --outline: #4cc2d8;
     --amber: #ffb020;
     --unknown: #5c8c72;
     --surface: #3c5a4a;
@@ -320,6 +343,12 @@
     flex-direction: column;
     height: 100%;
   }
+  /* display.text_scale enlarges everything around the map; the map itself keeps its scale */
+  .bar,
+  aside,
+  .credit-bar {
+    zoom: var(--ui-scale, 1);
+  }
   .bar {
     display: flex;
     align-items: center;
@@ -380,6 +409,7 @@
     min-height: 0;
   }
   .map-column {
+    position: relative;
     display: flex;
     flex: 1;
     flex-direction: column;
@@ -417,7 +447,8 @@
   aside {
     display: flex;
     flex-direction: column;
-    width: 340px;
+    /* Under zoom, the panel widens at 60% of the text scale; rows truncate rather than wrap */
+    width: calc(340px * (1 + (var(--ui-scale, 1) - 1) * 0.6) / var(--ui-scale, 1));
     border-left: 1px solid var(--line);
   }
   .list-wrap {

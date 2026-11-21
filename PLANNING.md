@@ -274,7 +274,7 @@ Decision: the adsb.fi API is sufficient for continuous personal use. Freshness d
 - The FAA registry cache is least-recently-used, capped at 5,000 aircraft.
 - The collector records its memory footprint hourly (`process_stats` table), the report shows first, last, peak and growth per hour, and `/api/health` includes current memory.
 
-Open: where it runs. A laptop under `caffeinate` works for sessions; continuous operation wants an always-on machine (a Mac mini or Raspberry Pi) under `launchd` or `systemd`. The next long run should check the hourly memory trend.
+Where it runs: a laptop under `caffeinate` works for sessions; continuous operation runs on a Raspberry Pi 5 under `systemd`, with a full-screen dashboard on a connected monitor (see [docs/pi-setup.md](docs/pi-setup.md) and [docs/raspberry-pi-kiosk.md](docs/raspberry-pi-kiosk.md)). The next long run should check the hourly memory trend.
 
 ## Roadmap
 
@@ -378,7 +378,11 @@ The report prints the milestone 1 gate plus latency, cached and repeated positio
 - The palette lives twice, in `lib/theme.ts` for the map and as CSS variables in `App.svelte`; keep them in step.
 - Overlays set `*-emissive-strength: 1` so Standard's night lighting doesn't dim them. `line-gradient` trails need `lineMetrics: true` on the source and can't vary color per feature, so each trail color has its own layer.
 - Positions keep aging on the browser clock between polls, using the server's thresholds. If the local server stops responding, markers fade and disappear instead of freezing.
-- The map resizes with its container (compact mode, the replay bar) and refits the visible area when the layout switches.
+- The map resizes with its container (compact mode, the replay bar, a kiosk window going full screen) and refits the home view (`display.view_radius_mi`, else the visible area) on every resize until someone pans or zooms. A Chromium kiosk can lay out before it reaches full screen, and the first fit used to stick, showing a much wider area on the TV. Recenter clears the manual-move flag.
+- `display.text_scale` sets `--ui-scale`, which the header, side panel, credit bar, weather card and legend apply as CSS `zoom`, so their px-based type scales without a rem rewrite. The panel's on-screen width grows at 60% of the scale (rows truncate rather than wrap). The map and its labels stay at 1×. Checked in headless Chrome: under zoom, the legend's `max-height: calc(100% - 90px)` resolves the percentage against the unzoomed map and scales only the px offset, so it stays on screen.
+- `[filters]` sets the starting filters, and `display.show_filters = false` hides the controls (for the TV, which has no input), leaving those filters fixed. `area.max_altitude_baro_ft` from older configs still works when `[filters]` doesn't set it. A configured altitude that isn't a preset is added to the menu.
+- Weather (added November 19, 2026) comes from api.weather.gov: the backend resolves the station once (`/points` → `observationStations`, nearest first, unless `weather.station` is set), then fetches `/stations/{id}/observations/latest` every 10 minutes. Failures retry after 60 s, doubling up to the interval, and keep the last observation. It rides along in `/api/state` as `weather`, live only, and isn't recorded. Stations report about hourly, so the card shows the observation's age and marks it stale past two hours. Values with QC flag `X` are dropped; ceiling is the lowest BKN, OVC or VV layer.
+- `boundaries/los-angeles.geojson` is the LA Bureau of Engineering city boundary from la-geography (fetched December 7, 2025), simplified to 0.0001° (9,049 points to 1,364; area changes 0.003%). The Census TIGER place was tried first and dropped: it includes offshore water, which drew straight lines across Santa Monica Bay. The outline draws as a 2 px line over a blurred glow, since a thin line disappeared among the basemap's own boundaries. `display.outlines` files are checked at startup and must be lon/lat polygons or lines.
 - Browser checks use Playwright with the cached Chromium and SwiftShader flags (`--use-angle=swiftshader --enable-unsafe-swiftshader`), against live data and replays of session 1.
 
 ### Test fixture
@@ -406,5 +410,3 @@ Documentation checked October 17, 2026. Provider policies and interfaces can cha
 4. [readsb JSON format](https://github.com/wiedehopf/readsb/blob/dev/README-json.md)
 5. [FlightTracer repository](https://github.com/stiles/flight-tracer)
 6. [The Flight Wall FAQ](https://theflightwall.com/pages/faq)
-
-The next engineering task is milestone 1: a headless collector, real response fixtures and a coverage report. That establishes whether the chosen feed supports the neighborhood display before frontend work begins.

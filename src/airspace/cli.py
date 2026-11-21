@@ -58,6 +58,16 @@ def _catalog(config: cfg.Config) -> Catalog:
         raise typer.Exit(2) from None
 
 
+def _check_outlines(config: cfg.Config) -> None:
+    from airspace import outlines
+
+    try:
+        outlines.load(config.display.outline_paths)
+    except outlines.OutlineError as exc:
+        typer.echo(f"Map outline: {exc}", err=True)
+        raise typer.Exit(2) from None
+
+
 @app.command()
 def init(
     config_file: ConfigOption = None,
@@ -233,6 +243,7 @@ def serve(
     logging.getLogger("httpx").setLevel(logging.WARNING)
     config = _load(config_file)
     catalog = _catalog(config)
+    _check_outlines(config)
     typer.echo(f"Serving http://127.0.0.1:{port} (API docs at /api/docs). Data: adsb.fi (https://adsb.fi).")
     typer.echo(f"Catalog: {len(catalog)} aircraft, {len(catalog.patterns)} owner patterns.")
     try:
@@ -252,6 +263,7 @@ def replay(
     """Serve recorded sessions with live acquisition disabled."""
     config = _load(config_file)
     _catalog(config)
+    _check_outlines(config)
     try:
         store = Store(config.storage.data_dir, read_only=True)
         session_id = store.resolve_session(session)

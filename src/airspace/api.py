@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from airspace.collector import Clock, Collector, make_fast_trigger
 from airspace.config import Config
 from airspace import export as export_mod
+from airspace import outlines as outlines_mod
 from airspace import procinfo
 from airspace.models import PollResult, from_iso, utcnow
 from airspace.providers import get_provider
@@ -26,6 +27,7 @@ from airspace.providers.base import USER_AGENT
 from airspace.replay import RegistryCache, replay_state
 from airspace.state import StateBuilder
 from airspace.storage import Store
+from airspace.weather import WeatherService
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +68,9 @@ class LiveService:
         self.stop = asyncio.Event()
         self.end_reason: str | None = None
         self._pending: set[asyncio.Future] = set()
+        self.weather: WeatherService | None = None
+        self.weather_client: httpx.AsyncClient | None = None
+        self.weather_task: asyncio.Task | None = None
 
     def _on_poll(self, result: PollResult) -> None:
         self.state.ingest(result)
@@ -87,6 +92,15 @@ class LiveService:
         )
         self.session_id = self.collector.start_session("serve")
         self.task = asyncio.create_task(self._run())
+        if self.config.weather.enabled:
+            # NWS asks for a User-Agent that identifies the application
+            self.weather_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(10.0),
+                headers={"User-Agent": f"{USER_AGENT} https://github.com/stiles/airspace"},
+                transport=self.transport,
+            )
+            self.weather = WeatherService(self.config, self.weather_client)
+            self.weather_task = asyncio.create_task(self.weather.run(self.stop))
 
     async def _run(self) -> None:
         try:
@@ -101,6 +115,9 @@ class LiveService:
         self.stop.set()
         if self.task:
             await self.task
+        if self.weather_task:
+            await self.weather_task
+            await self.weather_client.aclose()
         if self._pending:
             await asyncio.gather(*self._pending, return_exceptions=True)
         self._lookup_executor.shutdown(wait=True)
@@ -131,6 +148,7 @@ def create_app(
     """`mode` is 'live' (collector running) or 'replay' (recorded data only, no provider requests)."""
     if mode not in ("live", "replay"):
         raise ValueError(mode)
+    outlines = outlines_mod.load(config.display.outline_paths)
 
     class ReplayRegistry:
         """One registry cache for replay and export requests; lookups serialized (DuckDB isn't thread-safe)."""
@@ -173,9 +191,17 @@ def create_app(
     @app.get("/api/state")
     async def state() -> dict:
         service = live()
-        snapshot = service.state.snapshot(now())
+        at = now()
+        snapshot = service.state.snapshot(at)
         snapshot["session_id"] = service.session_id
+        # Live only: conditions now, not at a replayed moment
+        snapshot["weather"] = service.weather.snapshot(at) if service.weather else None
         return snapshot
+
+    @app.get("/api/outlines")
+    def outline_features() -> dict:
+        """Boundaries from `display.show_la_boundary` and `display.outlines`, as one GeoJSON FeatureCollection."""
+        return outlines
 
     @app.get("/api/aircraft/{aircraft_id}")
     async def aircraft(aircraft_id: str) -> dict:
@@ -203,6 +229,7 @@ def create_app(
             "fast_polling": bool(service.collector and service.collector.fast),
             "registry_lookups": service.cache.registry is not None,
             "catalog_aircraft": len(service.cache.catalog) if service.cache.catalog else 0,
+            "weather": service.weather.snapshot(now())["status"] if service.weather else "off",
             "process": procinfo.memory().as_dict(),
         }
 

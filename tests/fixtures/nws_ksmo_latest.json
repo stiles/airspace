@@ -1,0 +1,118 @@
+{
+ "id": "https://api.weather.gov/stations/KSMO/observations/2026-11-19T23:00:00+00:00",
+ "type": "Feature",
+ "geometry": {
+  "type": "Point",
+  "coordinates": [
+   -118.45,
+   34.02
+  ]
+ },
+ "properties": {
+  "@id": "https://api.weather.gov/stations/KSMO/observations/2026-11-19T23:00:00+00:00",
+  "@type": "wx:ObservationStation",
+  "elevation": {
+   "unitCode": "wmoUnit:m",
+   "value": 53
+  },
+  "station": "https://api.weather.gov/stations/KSMO",
+  "stationId": "KSMO",
+  "stationName": "Santa Monica, Santa Monica Municipal Airport",
+  "timestamp": "2026-11-19T23:00:00+00:00",
+  "rawMessage": "",
+  "textDescription": "Partly Cloudy",
+  "icon": "https://api.weather.gov/icons/land/day/sct?size=medium",
+  "presentWeather": [],
+  "temperature": {
+   "unitCode": "wmoUnit:degC",
+   "value": 18,
+   "qualityControl": "V"
+  },
+  "dewpoint": {
+   "unitCode": "wmoUnit:degC",
+   "value": 12,
+   "qualityControl": "V"
+  },
+  "windDirection": {
+   "unitCode": "wmoUnit:degree_(angle)",
+   "value": 230,
+   "qualityControl": "V"
+  },
+  "windSpeed": {
+   "unitCode": "wmoUnit:km_h-1",
+   "value": 24.084,
+   "qualityControl": "V"
+  },
+  "windGust": {
+   "unitCode": "wmoUnit:km_h-1",
+   "value": 33.336,
+   "qualityControl": "S"
+  },
+  "barometricPressure": {
+   "unitCode": "wmoUnit:Pa",
+   "value": 101354.61,
+   "qualityControl": "V"
+  },
+  "seaLevelPressure": {
+   "unitCode": "wmoUnit:Pa",
+   "value": null,
+   "qualityControl": "Z"
+  },
+  "visibility": {
+   "unitCode": "wmoUnit:m",
+   "value": 16093.44,
+   "qualityControl": "C"
+  },
+  "maxTemperatureLast24Hours": {
+   "unitCode": "wmoUnit:degC",
+   "value": null
+  },
+  "minTemperatureLast24Hours": {
+   "unitCode": "wmoUnit:degC",
+   "value": null
+  },
+  "precipitationLast3Hours": {
+   "unitCode": "wmoUnit:mm",
+   "value": null,
+   "qualityControl": "Z"
+  },
+  "relativeHumidity": {
+   "unitCode": "wmoUnit:percent",
+   "value": 67.97370121525,
+   "qualityControl": "V"
+  },
+  "windChill": {
+   "unitCode": "wmoUnit:degC",
+   "value": null,
+   "qualityControl": "V"
+  },
+  "heatIndex": {
+   "unitCode": "wmoUnit:degC",
+   "value": null,
+   "qualityControl": "V"
+  },
+  "cloudLayers": [
+   {
+    "base": {
+     "unitCode": "wmoUnit:m",
+     "value": 822.96
+    },
+    "amount": "FEW"
+   },
+   {
+    "base": {
+     "unitCode": "wmoUnit:m",
+     "value": 1432.56
+    },
+    "amount": "SCT"
+   },
+   {
+    "base": {
+     "unitCode": "wmoUnit:m",
+     "value": 1828.8
+    },
+    "amount": "SCT"
+   }
+  ]
+ }
+}

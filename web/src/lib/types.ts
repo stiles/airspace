@@ -1,5 +1,7 @@
 // Mirrors the snapshot produced by src/airspace/state.py (SNAPSHOT_VERSION 1)
 
+import type { FeatureCollection, Geometry } from 'geojson';
+
 export type Freshness = 'fresh' | 'fading' | 'unknown' | 'hidden';
 export type FeedStatus = 'starting' | 'live' | 'delayed' | 'degraded' | 'stale' | 'paused';
 export type AircraftClass = 'rotorcraft' | 'gyroplane' | 'surface' | 'aircraft' | 'unknown';
@@ -110,7 +112,13 @@ export interface Snapshot {
     home: { latitude: number; longitude: number; label: string; title?: string };
     visible_radius_m: number;
     collection_radius_m: number;
-    max_altitude_baro_ft: number | null;
+    /** Radius the map frames; absent or null frames the visible area */
+    view_radius_m?: number | null;
+    /** Enlarges the interface around the map, e.g. 1.5 on a TV */
+    text_scale?: number;
+    /** False hides the altitude menu and checkboxes; `filters` then stays fixed */
+    show_filters?: boolean;
+    filters?: ConfigFilters;
   };
   thresholds: { fade_s: number; hide_s: number; trail_gap_s: number; trail_duration_s: number };
   feed: Feed;
@@ -118,6 +126,46 @@ export interface Snapshot {
   last_seen: LastSeen[];
   events: AreaEvent[];
   replay?: { session_id: number; at: string; session_start: string | null; session_end: string | null };
+  /** Live only; null when weather is turned off */
+  weather?: Weather | null;
+}
+
+export interface Observation {
+  observed_at: string;
+  description: string | null;
+  temperature_f: number | null;
+  dewpoint_f: number | null;
+  humidity_pct: number | null;
+  wind_direction_deg: number | null;
+  wind_speed_mph: number | null;
+  wind_gust_mph: number | null;
+  visibility_mi: number | null;
+  /** Lowest broken, overcast or obscured layer */
+  ceiling_ft: number | null;
+  /** Null when the station reported no sky cover */
+  clouds: { amount: string; base_ft: number | null }[] | null;
+}
+
+/** Boundaries from `display.outlines` in airspace.toml, e.g. city limits */
+export type Outlines = FeatureCollection<Geometry, { name: string | null }>;
+
+export interface Weather {
+  status: 'starting' | 'ok' | 'stale' | 'unavailable';
+  source: { name: string; url: string };
+  station: { id: string; name: string | null; distance_m: number | null } | null;
+  observation: Observation | null;
+  age_s: number | null;
+  checked_at: string | null;
+  error: string | null;
+}
+
+/** Starting filters from `[filters]` in airspace.toml */
+export interface ConfigFilters {
+  max_altitude_baro_ft: number | null;
+  unknown_altitude: boolean;
+  on_ground: boolean;
+  surface_vehicles: boolean;
+  list_visible_only: boolean;
 }
 
 export const SUPPORTED_SNAPSHOT_VERSION = 1;

@@ -21,6 +21,7 @@ def config(tmp_path) -> Config:
             "storage": {"data_dir": str(tmp_path / "data")},
             # Tests opt in to catalogs explicitly; never the repo's own
             "enrich": {"hangarbay_db": None, "catalogs": []},
+            "weather": {"enabled": False},
         }
     )
 

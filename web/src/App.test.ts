@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Snapshot } from './lib/types';
+import type { Outlines, Snapshot, Weather } from './lib/types';
 import { aircraft, snapshot } from './test/fixtures';
 import { instances } from './test/mapbox-mock';
 
@@ -18,10 +18,13 @@ const { default: App } = await import('./App.svelte');
 
 type Step = Snapshot | 'down';
 
-/** Fake fetch that serves one step per request, repeating the last. */
-function server(steps: Step[]) {
+const NO_OUTLINES: Outlines = { type: 'FeatureCollection', features: [] };
+
+/** Fake fetch that serves one step per request, repeating the last. Outlines don't use a step. */
+function server(steps: Step[], outlines: Outlines = NO_OUTLINES) {
   let i = 0;
-  const fetchFn = vi.fn(async () => {
+  const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input) === '/api/outlines') return new Response(JSON.stringify(outlines), { status: 200 });
     const step = steps[Math.min(i++, steps.length - 1)];
     if (step === 'down') throw new TypeError('fetch failed');
     return new Response(JSON.stringify(step), { status: 200 });
@@ -489,5 +492,107 @@ describe('Behaviors', () => {
     map().fire('mousemove:aircraft', { features: [{ properties: { id: 'ab4ea1' } }] });
     await tick();
     expect(screen.getByTestId('map-tooltip')).toHaveTextContent('Hovering 15+ min · radius 29 m · around 1,800 ft');
+  });
+
+  describe('home view, outlines and weather', () => {
+    const weather: Weather = {
+      status: 'ok',
+      source: { name: 'National Weather Service', url: 'https://www.weather.gov' },
+      station: { id: 'KSMO', name: 'Santa Monica, Santa Monica Municipal Airport', distance_m: 1600 },
+      observation: {
+        observed_at: '2026-10-17T19:08:00.000+00:00', description: 'Partly Cloudy', temperature_f: 64,
+        dewpoint_f: 54, humidity_pct: 68, wind_direction_deg: 230, wind_speed_mph: 15, wind_gust_mph: 21,
+        visibility_mi: 10, ceiling_ft: null, clouds: [{ amount: 'FEW', base_ft: 2700 }],
+      },
+      age_s: 3120,
+      checked_at: '2026-10-17T20:00:00.000+00:00',
+      error: null,
+    };
+    const city: Outlines = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature', properties: { name: 'Los Angeles city limits' },
+        geometry: { type: 'LineString', coordinates: [[-118.5, 34.0], [-118.3, 34.1]] },
+      }],
+    };
+
+    function latSpan() {
+      const [[, south], [, north]] = map().fitBounds.mock.calls.at(-1)![0];
+      return north - south;
+    }
+
+    it('frames the view radius when set, else the visible area', async () => {
+      render(App, { fetchFn: server([snapshot()]), pollMs: 60_000 });
+      await advance(0);
+      const visible = latSpan();
+      cleanup();
+      const base = snapshot();
+      render(App, { fetchFn: server([snapshot({ area: { ...base.area, view_radius_m: 3218.7 } })]), pollMs: 60_000 });
+      await advance(0);
+      expect(latSpan()).toBeLessThan(visible * 0.5);
+    });
+
+    it('draws outlines and names them in the legend', async () => {
+      render(App, { fetchFn: server([snapshot()], city), pollMs: 60_000 });
+      await advance(0);
+      expect(map().layers.indexOf('outlines')).toBeLessThan(map().layers.indexOf('rings'));
+      expect(map().getSource('outlines')!.setData.mock.calls.at(-1)![0].features).toHaveLength(1);
+      expect(screen.getByTestId('legend')).toHaveTextContent('Los Angeles city limits');
+    });
+
+    it('shows live weather with its age and marks it stale after two hours', async () => {
+      render(App, { fetchFn: server([snapshot({ weather })]), pollMs: 60_000 });
+      await advance(0);
+      const card = screen.getByTestId('weather');
+      expect(card).toHaveTextContent('NWS · KSMO');
+      expect(card).toHaveTextContent('64°');
+      expect(card).toHaveTextContent('Partly Cloudy');
+      expect(card).toHaveTextContent('Wind SW 15 mph, gusts 21');
+      expect(card).toHaveTextContent('Visibility 10 mi, no ceiling');
+      expect(card).toHaveTextContent('52 min ago');
+      expect(card).not.toHaveClass('stale');
+
+      await advance(70 * 60_000);
+      expect(screen.getByTestId('weather')).toHaveClass('stale');
+      expect(screen.getByTestId('weather')).toHaveTextContent('station not reporting');
+    });
+
+    it('applies the text scale from the config', async () => {
+      const base = snapshot();
+      render(App, { fetchFn: server([snapshot({ area: { ...base.area, text_scale: 1.5 } })]), pollMs: 60_000 });
+      await advance(0);
+      expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.5');
+    });
+
+    it('hides the filter controls and applies the configured filters', async () => {
+      const base = snapshot();
+      const parked = aircraft({ id: 'a00001', registration: 'N1', callsign: 'PARKED', on_ground: true, distance_m: 900 });
+      const area = {
+        ...base.area,
+        show_filters: false,
+        filters: { ...base.area.filters!, on_ground: true, max_altitude_baro_ft: 2000 },
+      };
+      render(App, { fetchFn: server([snapshot({ area, aircraft: [heli, jet, parked] })]), pollMs: 60_000 });
+      await advance(0);
+      expect(screen.queryByTestId('altitude-filter')).toBeNull();
+      const rows = within(screen.getByTestId('aircraft-list')).getAllByRole('button');
+      // The jet at 2,550 ft is above the configured 2,000 ft; the parked aircraft is shown
+      expect(rows.map((r) => r.dataset.id)).toEqual(['a00001', 'a1f48f']);
+    });
+
+    it('adds a configured altitude that is not a preset to the menu', async () => {
+      const base = snapshot();
+      const area = { ...base.area, filters: { ...base.area.filters!, max_altitude_baro_ft: 3000 } };
+      render(App, { fetchFn: server([snapshot({ area })]), pollMs: 60_000 });
+      await advance(0);
+      const select = screen.getByTestId('altitude-filter') as HTMLSelectElement;
+      expect(select.selectedOptions[0].textContent).toBe('Below 3,000 ft (barometric)');
+    });
+
+    it('leaves the card out when weather is off', async () => {
+      render(App, { fetchFn: server([snapshot({ weather: null })]), pollMs: 60_000 });
+      await advance(0);
+      expect(screen.queryByTestId('weather')).toBeNull();
+    });
   });
 });
