@@ -136,6 +136,14 @@
     m.addSource('trails', { type: 'geojson', data: empty, lineMetrics: true });
     m.addSource('behaviors', { type: 'geojson', data: empty });
     m.addSource('aircraft', { type: 'geojson', data: empty, promoteId: 'id' });
+    m.addSource('69-bravo', {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [-118.6273692, 34.074326] },
+        properties: { name: '69 Bravo' },
+      },
+    });
 
     // A soft glow under a solid line, so it reads against the basemap's own boundary lines
     m.addLayer({
@@ -258,6 +266,37 @@
         },
       });
     }
+    m.addLayer({
+      id: '69-bravo-marker',
+      type: 'circle',
+      source: '69-bravo',
+      paint: {
+        'circle-radius': 3,
+        'circle-color': SCOPE.halo,
+        'circle-stroke-color': SCOPE.landmark,
+        'circle-stroke-width': 1.5,
+        'circle-emissive-strength': 1,
+      },
+    });
+    m.addLayer({
+      id: '69-bravo-label',
+      type: 'symbol',
+      source: '69-bravo',
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-font': FONT,
+        'text-size': 12,
+        'text-variable-anchor': ['right', 'top', 'bottom', 'left'],
+        'text-radial-offset': 0.65,
+        'text-ignore-placement': true,
+      },
+      paint: {
+        'text-color': SCOPE.landmark,
+        'text-halo-color': SCOPE.halo,
+        'text-halo-width': 1.5,
+        'text-emissive-strength': 1,
+      },
+    });
     m.addLayer({
       id: 'selection',
       type: 'circle',

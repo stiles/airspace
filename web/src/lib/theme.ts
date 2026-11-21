@@ -11,6 +11,7 @@ export const SCOPE = {
   surface: '#3c5a4a',
   accent: '#7fe7ff', // selection and home
   outline: '#4cc2d8', // boundaries such as city limits
+  landmark: '#91b7aa',
   halo: '#030805',
 };
 

@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 export const instances: FakeMap[] = [];
 
 export class FakeMap {
-  sources = new Map<string, { setData: ReturnType<typeof vi.fn> }>();
+  sources = new Map<string, { spec: unknown; setData: ReturnType<typeof vi.fn> }>();
   layers: string[] = [];
   addSourceCalls = 0;
   addLayerCalls = 0;
@@ -39,9 +39,9 @@ export class FakeMap {
   hasImage(name: string) {
     return this.images.has(name);
   }
-  addSource(id: string) {
+  addSource(id: string, spec: unknown) {
     this.addSourceCalls++;
-    this.sources.set(id, { setData: vi.fn() });
+    this.sources.set(id, { spec, setData: vi.fn() });
   }
   getSource(id: string) {
     return this.sources.get(id);

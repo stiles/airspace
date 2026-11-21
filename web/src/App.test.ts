@@ -126,10 +126,22 @@ describe('App', () => {
     const layers = m.addLayerCalls;
     const sources = m.addSourceCalls;
     expect(m.layers).toEqual(expect.arrayContaining(['rings', 'trails', 'aircraft', 'selection']));
+    const helispot = m.getSource('69-bravo')!;
+    expect(helispot.spec).toEqual({
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [-118.6273692, 34.074326] },
+        properties: { name: '69 Bravo' },
+      },
+    });
+    expect(m.layers).toEqual(expect.arrayContaining(['69-bravo-marker', '69-bravo-label']));
+    expect(m.layers.indexOf('69-bravo-label')).toBeLessThan(m.layers.indexOf('aircraft'));
 
     for (let i = 0; i < 5; i++) await advance(POLL);
     expect(m.addLayerCalls).toBe(layers);
     expect(m.addSourceCalls).toBe(sources);
+    expect(helispot.setData).not.toHaveBeenCalled();
     expect(instances).toHaveLength(1);
     expect(m.getSource('aircraft')!.setData.mock.calls.length).toBeGreaterThan(5);
 
