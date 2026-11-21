@@ -24,6 +24,7 @@ describe('radarizeBasemap', () => {
       { id: 'water', type: 'fill' },
       { id: 'aeroway-polygon', type: 'fill' },
       { id: 'road-motorway-trunk', type: 'line' },
+      { id: 'road-secondary-tertiary', type: 'line' },
       { id: 'road-street', type: 'line' },
       { id: 'admin-1-boundary', type: 'line' },
       { id: 'settlement-major-label', type: 'symbol' },
@@ -36,7 +37,8 @@ describe('radarizeBasemap', () => {
     expect(paint.water['fill-color']).toBe(BASEMAP.water);
     expect(paint['aeroway-polygon']['fill-color']).toBe(BASEMAP.road);
     expect(paint['road-motorway-trunk']['line-color']).toBe(BASEMAP.roadMajor);
-    expect(paint['road-street']['line-color']).toBe(BASEMAP.road);
+    expect(paint['road-secondary-tertiary']['line-color']).toBe(BASEMAP.road);
+    expect(paint['road-street']['line-color']).toBe(BASEMAP.roadMinor);
     expect(paint['admin-1-boundary']['line-color']).toBe(BASEMAP.boundary);
     expect(paint['settlement-major-label']['text-color']).toBe(BASEMAP.labelPlace);
     expect(layout['poi-label'].visibility).toBe('none');

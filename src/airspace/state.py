@@ -359,6 +359,8 @@ class StateBuilder:
                 "view_radius_m": self.config.view_radius_m,
                 "text_scale": self.config.display.text_scale,
                 "show_filters": self.config.display.show_filters,
+                # Older version 1 dashboards read the altitude limit directly from area.
+                "max_altitude_baro_ft": self.config.filters.max_altitude_baro_ft,
                 "filters": self.config.filters.model_dump(),
             },
             "thresholds": f.model_dump(),

@@ -8,15 +8,12 @@
     outlineNames = [],
   }: { visibleLabel: string; compact?: boolean; outlineNames?: string[] } = $props();
 
-  // The map remounts the legend when the layout changes, so the layout is fixed here.
-  // Open on a full window, folded in compact mode, unless the user chose otherwise.
-  const folded = untrack(() => compact);
-  const key = folded ? 'legend-compact' : 'legend';
-  let open = $state(loadPref(key, !folded));
+  // The map remounts the legend when the layout changes. The old desktop key stored its open default.
+  const key = untrack(() => (compact ? 'legend-compact' : 'legend-expanded'));
+  const initiallyOpen = loadPref(key, false);
 
   function toggle(e: Event) {
-    open = (e.currentTarget as HTMLDetailsElement).open;
-    savePref(key, open);
+    savePref(key, (e.currentTarget as HTMLDetailsElement).open);
   }
 
   // Same outlines as the map symbols in lib/icons.ts (64-unit canvas)
@@ -27,7 +24,7 @@
   <svg viewBox="0 0 64 64" class="sym {cls}" aria-hidden="true"><path d={PLANE} /></svg>
 {/snippet}
 
-<details class="legend" {open} ontoggle={toggle} data-testid="legend">
+<details class="legend" open={initiallyOpen} ontoggle={toggle} data-testid="legend">
   <summary>Legend</summary>
   <ul>
     <li>{@render plane('aircraft')} Airplane</li>
@@ -58,9 +55,9 @@
     </li>
     <li><i class="line trail" aria-hidden="true"></i> Recent track</li>
     <li><i class="orbit" aria-hidden="true"></i> Circling or hovering (inferred)</li>
-    <li class="gap"><i class="dot" aria-hidden="true"></i> Home area</li>
+    <li class="gap"><i class="dot" aria-hidden="true"></i> Home</li>
     <li><i class="line ring" aria-hidden="true"></i> 1-mile rings</li>
-    <li><i class="line visible" aria-hidden="true"></i> Visible area, {visibleLabel}</li>
+    <li><i class="line visible" aria-hidden="true"></i> Home radius, {visibleLabel}</li>
     <li><i class="line collection" aria-hidden="true"></i> Collection limit</li>
     {#each outlineNames as name (name)}
       <li><i class="line outline" aria-hidden="true"></i> {name}</li>
@@ -90,6 +87,10 @@
     color: var(--muted-strong);
     cursor: pointer;
     user-select: none;
+  }
+  summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
   ul {
     margin: 0;

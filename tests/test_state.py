@@ -137,3 +137,10 @@ def test_snapshot_carries_page_title(config):
     assert StateBuilder(config).snapshot(at(0))["area"]["home"]["title"] == "Airspace"
     config.home.title = "Jim's Airspace"
     assert StateBuilder(config).snapshot(at(0))["area"]["home"]["title"] == "Jim's Airspace"
+
+
+@pytest.mark.parametrize("altitude_limit", [None, 5000])
+def test_snapshot_preserves_legacy_altitude_filter(config, altitude_limit):
+    config.filters.max_altitude_baro_ft = altitude_limit
+    area = StateBuilder(config).snapshot(at(0))["area"]
+    assert area["max_altitude_baro_ft"] == area["filters"]["max_altitude_baro_ft"] == altitude_limit

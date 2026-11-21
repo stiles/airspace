@@ -74,12 +74,12 @@ For an always-on setup, [docs/pi-setup.md](docs/pi-setup.md) covers installing A
 
 ### Dashboard
 
-- **Map:** the side list sorts aircraft by distance. Click an aircraft on the map or in the list for details: identity, type, altitude, speed, vertical rate, position source and age. Labels show altitude in hundreds of feet (`015` is 1,500 ft barometric).
+- The aircraft list shows its distance limit and sorts by distance. Select an aircraft on the map or in the list to see its details. Selecting an offscreen aircraft in the list pans the map to it. Open **Legend** for map symbols and altitude labels (`015` is 1,500 ft barometric).
 - **Filters:** altitude presets, unknown altitude, on-ground aircraft and surface vehicles. Ground traffic is hidden by default to keep LAX out of the way. Filters run in the browser and never cause extra requests. `[filters]` sets their starting values, and `display.show_filters = false` hides the controls, for a screen nobody touches.
 - **Compact:** the button in the header switches to a map-only layout; clicking an aircraft pins its hover card. Small windows start compact.
 - **Replay:** use the Live/Replay switch. The timeline shows each poll (green succeeded, red failed, hatched while asleep) with an amber strip when a helicopter was in the feed. Drag to seek; space plays and pauses, ← and → step by poll, and the speed runs from 1× to 60×. The URL keeps `?session=&at=`, so any moment can be bookmarked.
 
-- **Weather:** the card at the top right shows the latest observation from the station in `[weather]`, its time and how old it is. Stations report about hourly; past two hours the card dims and says the station isn't reporting. It's live only and isn't recorded, so replay doesn't show it.
+- Open **Weather** at the bottom of the sidebar, or on the map in compact mode, for wind gusts, visibility, ceiling and observation time. The summary marks observations older than two hours as stale. Weather appears in live mode.
 - **Home view:** the map frames `display.view_radius_mi` around home, or the visible area when that's unset, and refits when the window changes size until you pan or zoom. Recenter returns to it.
 
 To use a different Mapbox style, add `VITE_MAPBOX_STYLE=mapbox://styles/...` to `web/.env.local` and rebuild. Classic styles are recolored into the radar palette; Mapbox Standard styles keep their own colors.

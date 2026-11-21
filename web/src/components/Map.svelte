@@ -16,13 +16,14 @@
     aircraft: Aircraft[];
     area: Snapshot['area'] | null;
     selectedId: string | null;
+    listSelection: { id: string } | null;
     onselect: (id: string | null) => void;
     /** Compact mode: no detail panel, so the selection keeps its hover card open */
     compact?: boolean;
     outlines?: Outlines | null;
   }
 
-  let { aircraft, area, selectedId, onselect, compact = false, outlines = null }: Props = $props();
+  let { aircraft, area, selectedId, listSelection, onselect, compact = false, outlines = null }: Props = $props();
 
   const TOKEN = MAPBOX_TOKEN;
 
@@ -151,8 +152,8 @@
       filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'collection']],
       paint: {
         'line-color': ['match', ['get', 'kind'], 'visible', SCOPE.phosphor, SCOPE.ring],
-        'line-width': ['match', ['get', 'kind'], 'visible', 1.25, 1],
-        'line-opacity': ['match', ['get', 'kind'], 'visible', 0.55, 0.7],
+        'line-width': ['match', ['get', 'kind'], 'visible', 1.25, 0.75],
+        'line-opacity': ['match', ['get', 'kind'], 'visible', 0.55, 0.45],
         'line-emissive-strength': 1,
       },
     });
@@ -177,6 +178,7 @@
       layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 11, 'text-offset': [0, -0.7] },
       paint: {
         'text-color': SCOPE.ringLabel,
+        'text-opacity': ['match', ['get', 'kind'], 'ring', 0.75, 1],
         'text-halo-color': SCOPE.halo,
         'text-halo-width': 1,
         'text-emissive-strength': 1,
@@ -258,7 +260,7 @@
         'symbol-sort-key': ['case', ['get', 'selected'], 2, ['match', ['get', 'kind'], ['rotorcraft', 'gyroplane'], 1, 0]],
         'text-field': ['get', 'label'],
         'text-font': FONT,
-        'text-size': 11,
+        'text-size': 12,
         'text-anchor': 'top',
         'text-offset': [0, 1.3],
         'text-optional': true,
@@ -269,7 +271,8 @@
         'text-color': ['case', ['get', 'selected'], SCOPE.accent, helicopter, SCOPE.amber, SCOPE.phosphorText],
         'text-opacity': freshnessOpacity,
         'text-halo-color': SCOPE.halo,
-        'text-halo-width': 1.2,
+        'text-halo-width': 1.7,
+        'text-halo-blur': 0.3,
         'icon-emissive-strength': 1,
         'text-emissive-strength': 1,
       },
@@ -354,6 +357,21 @@
     requestAnimationFrame(() => {
       map?.resize();
       if (map && area) map.fitBounds(viewBounds(area), { padding: 24, duration: 0 });
+    });
+  });
+
+  // Pan once on a row selection. Polls and replay seeks only update the marker.
+  $effect(() => {
+    const m = map;
+    if (!ready || !m || !listSelection) return;
+    const id = listSelection.id;
+    untrack(() => {
+      const target = aircraft.find((a) => a.id === id);
+      if (!target) return;
+      const position: LonLat = [target.longitude, target.latitude];
+      if (m.getBounds().contains(position)) return;
+      userMoved = true;
+      m.panTo(position, { duration: 450 });
     });
   });
 

@@ -22,6 +22,7 @@ export const BASEMAP = {
   building: '#0a1811',
   road: '#0d2419',
   roadMajor: '#14402a',
+  roadMinor: '#0b1d14',
   boundary: '#1a4d33',
   label: '#356b4f',
   labelPlace: '#4f9672',

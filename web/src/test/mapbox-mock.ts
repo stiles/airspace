@@ -12,6 +12,8 @@ export class FakeMap {
   canvas = { style: { cursor: '' } };
   touchZoomRotate = { disableRotation: vi.fn() };
   fitBounds = vi.fn();
+  boundsContain = vi.fn(() => true);
+  panTo = vi.fn();
   addControl = vi.fn();
   remove = vi.fn();
   resize = vi.fn();
@@ -54,6 +56,9 @@ export class FakeMap {
   }
   getCanvas() {
     return this.canvas;
+  }
+  getBounds() {
+    return { contains: this.boundsContain };
   }
   // Fixed screen offset per degree, enough to check the hover card follows its aircraft
   project([lon, lat]: [number, number]) {

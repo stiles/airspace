@@ -74,8 +74,10 @@ describe('App', () => {
 
     const rows = within(screen.getByTestId('aircraft-list')).getAllByRole('button');
     expect(rows.map((r) => r.dataset.id)).toEqual(['a1f48f', 'a6ed7f']);
+    expect(screen.getByRole('heading', { level: 2, name: /2 aircraft Within 5\.0 mi of home/i })).toBeInTheDocument();
 
     await fireEvent.click(rows[0]);
+    expect(map().panTo).not.toHaveBeenCalled();
     expect(screen.getByTestId('detail')).toHaveTextContent('N225LA');
     expect(screen.getByTestId('detail')).toHaveTextContent('1,500 ft');
     expect(screen.getByTestId('detail')).toHaveTextContent('Helicopter (ADS-B emitter category)');
@@ -88,6 +90,23 @@ describe('App', () => {
     expect(reordered.map((r) => r.dataset.id)).toEqual(['a6ed7f', 'a1f48f']);
     expect(reordered[1]).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('detail')).toHaveTextContent('N225LA');
+  });
+
+  it('pans to an offscreen aircraft on row selection and keeps the view on subsequent polls', async () => {
+    const moved = { ...jet, longitude: jet.longitude + 0.01 };
+    render(App, { fetchFn: server([snapshot({ aircraft: [jet] }), snapshot({ aircraft: [moved] })]), pollMs: POLL });
+    await advance(0);
+    const row = screen.getByRole('button', { name: /UAL2113/ });
+    const m = map();
+    m.boundsContain.mockReturnValue(false);
+
+    await fireEvent.click(row);
+    expect(m.panTo).toHaveBeenCalledWith([jet.longitude, jet.latitude], { duration: 450 });
+
+    await advance(POLL);
+    expect(m.panTo).toHaveBeenCalledTimes(1);
+    await fireEvent.click(row);
+    expect(m.panTo).toHaveBeenLastCalledWith([moved.longitude, moved.latitude], { duration: 450 });
   });
 
   it('titles the page from the config', async () => {
@@ -349,16 +368,20 @@ describe('Map extras', () => {
     expect(screen.queryByTestId('map-tooltip')).toBeNull();
   });
 
-  it('has a legend that names the visible radius and remembers being closed', async () => {
+  it('starts with a collapsed legend that names the home radius and remembers being opened', async () => {
+    localStorage.setItem('airspace:legend', '1'); // older dashboards saved their open default
     render(App, { fetchFn: server([snapshot()]), pollMs: POLL });
     await advance(0);
     const legend = screen.getByTestId('legend') as HTMLDetailsElement;
-    expect(legend.open).toBe(true);
-    expect(legend).toHaveTextContent(/Visible area, \d/);
+    expect(legend.open).toBe(false);
+    expect(legend).toHaveTextContent(/Home radius, \d/);
     expect(legend).toHaveTextContent('Helicopter');
-    legend.open = false;
+    legend.open = true;
     await fireEvent(legend, new Event('toggle'));
-    expect(localStorage.getItem('airspace:legend')).toBe('0');
+    expect(localStorage.getItem('airspace:legend-expanded')).toBe('1');
+    await fireEvent.click(screen.getByTestId('compact-toggle'));
+    await fireEvent.click(screen.getByTestId('compact-toggle'));
+    expect(screen.getByTestId('legend')).toHaveAttribute('open');
   });
 
   it('compact mode keeps the map and credit, drops the panel and pins the selection card', async () => {
@@ -540,10 +563,16 @@ describe('Behaviors', () => {
       expect(screen.getByTestId('legend')).toHaveTextContent('Los Angeles city limits');
     });
 
-    it('shows live weather with its age and marks it stale after two hours', async () => {
+    it('summarizes the weather in the sidebar with observation details on demand', async () => {
       render(App, { fetchFn: server([snapshot({ weather })]), pollMs: 60_000 });
       await advance(0);
-      const card = screen.getByTestId('weather');
+      const card = screen.getByTestId('weather') as HTMLDetailsElement;
+      const summary = card.querySelector('summary')!;
+      expect(card.closest('aside')).toBe(screen.getByRole('complementary'));
+      expect(card.open).toBe(false);
+      expect(summary).toHaveTextContent('Weather 64° Partly Cloudy · Wind SW 15 mph');
+      await fireEvent.click(summary);
+      expect(card.open).toBe(true);
       expect(card).toHaveTextContent('NWS · KSMO');
       expect(card).toHaveTextContent('64°');
       expect(card).toHaveTextContent('Partly Cloudy');
@@ -553,8 +582,14 @@ describe('Behaviors', () => {
       expect(card).not.toHaveClass('stale');
 
       await advance(70 * 60_000);
-      expect(screen.getByTestId('weather')).toHaveClass('stale');
-      expect(screen.getByTestId('weather')).toHaveTextContent('station not reporting');
+      expect(card).toHaveClass('stale');
+      expect(summary).toHaveTextContent('Stale');
+      expect(card).toHaveTextContent('station not reporting');
+
+      await fireEvent.click(screen.getByTestId('compact-toggle'));
+      const compactWeather = screen.getByTestId('weather');
+      expect(compactWeather).toHaveClass('compact');
+      expect(compactWeather).not.toHaveAttribute('open');
     });
 
     it('applies the text scale from the config', async () => {

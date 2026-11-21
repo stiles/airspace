@@ -9,6 +9,7 @@ const HIDE = [/^poi/, /transit/, /shield/, /^road-exit/, /^ferry/, /^aerialway/,
 
 const WATER = /water/;
 const MAJOR_ROAD = /motorway|trunk|primary/;
+const SECONDARY_ROAD = /secondary|tertiary/;
 const ROAD = /road|bridge|tunnel|street|path|rail/;
 const BOUNDARY = /admin|boundary/;
 const AEROWAY = /aeroway|airport|runway/;
@@ -40,7 +41,10 @@ export function radarizeBasemap(map: mapboxgl.Map): boolean {
           else if (BOUNDARY.test(id)) map.setPaintProperty(id, 'line-color', BASEMAP.boundary);
           else if (AEROWAY.test(id)) map.setPaintProperty(id, 'line-color', BASEMAP.roadMajor);
           else if (MAJOR_ROAD.test(id)) map.setPaintProperty(id, 'line-color', BASEMAP.roadMajor);
-          else if (ROAD.test(id)) map.setPaintProperty(id, 'line-color', BASEMAP.road);
+          else if (ROAD.test(id)) {
+            const color = SECONDARY_ROAD.test(id) ? BASEMAP.road : BASEMAP.roadMinor;
+            map.setPaintProperty(id, 'line-color', color);
+          }
           break;
         case 'symbol':
           map.setPaintProperty(id, 'text-color', PLACE.test(id) ? BASEMAP.labelPlace : BASEMAP.label);

@@ -36,6 +36,7 @@
   let fetchedAt = $state(0);
   let now = $state(Date.now());
   let selectedId = $state<string | null>(null);
+  let listSelection = $state.raw<{ id: string } | null>(null);
   let filters = $state<Filters>(defaultFilters());
   let filtersInitialized = false;
   // Map-only layout for a small always-on window; small windows start compact
@@ -122,6 +123,7 @@
   function enterReplay(sessionId?: number | null, at?: number | null) {
     stopLive?.();
     stopLive = undefined;
+    listSelection = null;
     mode = 'replay';
     replay.open(sessionId ?? liveSnapshot?.session_id ?? null, at ?? null);
   }
@@ -129,6 +131,7 @@
   function enterLive() {
     if (replayOnly) return;
     replay.pause();
+    listSelection = null;
     mode = 'live';
     setLocation(null);
     startLive();
@@ -158,6 +161,12 @@
 
   function select(id: string | null) {
     selectedId = id;
+    listSelection = null;
+  }
+
+  function selectFromList(id: string) {
+    selectedId = id;
+    listSelection = { id };
   }
 
   function keydown(e: KeyboardEvent) {
@@ -192,7 +201,7 @@
     {/if}
     <FeedStatus {view} />
     <div class="right">
-    {#if snapshot && !view.untrusted}
+    {#if compact && snapshot && !view.untrusted}
       <span class="count" data-testid="count">
         {listed.length} aircraft{filters.listVisibleOnly ? ` within ${visibleLabel}` : ''}
       </span>
@@ -211,10 +220,10 @@
   <main>
     <div class="map-column">
       <div class="map-pane" class:untrusted={view.untrusted}>
-        <MapView aircraft={onMap} area={snapshot?.area ?? null} {selectedId} onselect={select} {compact} {outlines} />
+        <MapView aircraft={onMap} area={snapshot?.area ?? null} {selectedId} {listSelection} onselect={select} {compact} {outlines} />
       </div>
-      {#if weather}
-        <WeatherCard {weather} {now} />
+      {#if compact && weather}
+        <WeatherCard {weather} {now} {compact} />
       {/if}
       {#if mode === 'replay'}
         <Timeline {replay} {compact} />
@@ -238,14 +247,27 @@
           exportHref={sessionId !== null && selectedId ? exportUrl(sessionId, { aircraft: selectedId }) : null}
           onclose={() => select(null)}
         />
+        <h2 class="list-heading">
+          {#if snapshot && !view.untrusted}
+            <span data-testid="count">{listed.length} aircraft</span>
+          {:else}
+            Aircraft
+          {/if}
+          {#if snapshot}
+            <span class="list-scope">{filters.listVisibleOnly ? `Within ${visibleLabel} of home` : 'Full collection area'}</span>
+          {/if}
+        </h2>
         <div class="list-wrap">
           <AircraftList
             aircraft={listed}
             {selectedId}
             emptyMessage={emptyListMessage(view, aged.length > 0)}
-            onselect={select}
+            onselect={selectFromList}
           />
         </div>
+        {#if weather}
+          <WeatherCard {weather} {now} />
+        {/if}
         <footer>{@render credit()}</footer>
       </aside>
     {/if}
@@ -450,6 +472,25 @@
     /* Under zoom, the panel widens at 60% of the text scale; rows truncate rather than wrap */
     width: calc(340px * (1 + (var(--ui-scale, 1) - 1) * 0.6) / var(--ui-scale, 1));
     border-left: 1px solid var(--line);
+  }
+  .list-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .list-scope {
+    color: var(--muted-strong);
+    font-size: 12px;
+    font-weight: 400;
+    text-align: right;
   }
   .list-wrap {
     flex: 1;
