@@ -5,11 +5,14 @@
   interface Props {
     aircraft: Aircraft[];
     selectedId: string | null;
+    highlightedId: string | null;
     emptyMessage: string;
     onselect: (id: string) => void;
+    onhover: (id: string | null) => void;
+    onfocusaircraft: (id: string | null) => void;
   }
 
-  let { aircraft, selectedId, emptyMessage, onselect }: Props = $props();
+  let { aircraft, selectedId, highlightedId, emptyMessage, onselect, onhover, onfocusaircraft }: Props = $props();
 </script>
 
 {#if aircraft.length === 0}
@@ -21,9 +24,18 @@
         <button
           type="button"
           class:selected={a.id === selectedId}
+          class:highlighted={a.id === highlightedId}
           class:fading={a.freshness === 'fading'}
           aria-pressed={a.id === selectedId}
           onclick={() => onselect(a.id)}
+          onpointerenter={(event) => {
+            if (event.pointerType !== 'touch') onhover(a.id);
+          }}
+          onpointerleave={(event) => {
+            if (event.pointerType !== 'touch') onhover(null);
+          }}
+          onfocus={() => onfocusaircraft(a.id)}
+          onblur={() => onfocusaircraft(null)}
           data-id={a.id}
         >
           <span class="kind {a.class}" aria-hidden="true"></span>
@@ -69,15 +81,20 @@
     text-align: left;
     cursor: pointer;
   }
-  button:hover {
+  button.highlighted {
     background: var(--hover);
+    box-shadow: inset 2px 0 var(--muted-strong);
   }
   button.selected {
     background: var(--selected-bg);
     box-shadow: inset 3px 0 var(--accent);
   }
-  button.fading {
+  button.fading:not(.highlighted):not(:focus-visible) {
     opacity: 0.55;
+  }
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
   .kind {
     grid-area: kind;

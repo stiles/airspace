@@ -14,6 +14,7 @@ export class FakeMap {
   fitBounds = vi.fn();
   boundsContain = vi.fn(() => true);
   panTo = vi.fn();
+  setFilter = vi.fn();
   addControl = vi.fn();
   remove = vi.fn();
   resize = vi.fn();
@@ -61,8 +62,9 @@ export class FakeMap {
     return { contains: this.boundsContain };
   }
   // Fixed screen offset per degree, enough to check the hover card follows its aircraft
+  projectScale = 1000;
   project([lon, lat]: [number, number]) {
-    return { x: Math.round((lon + 118.5) * 1000), y: Math.round((34.1 - lat) * 1000) };
+    return { x: Math.round((lon + 118.5) * this.projectScale), y: Math.round((34.1 - lat) * this.projectScale) };
   }
   queryRenderedFeatures() {
     return this.rendered;

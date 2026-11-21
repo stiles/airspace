@@ -2,12 +2,12 @@
   import mapboxgl, { type GeoJSONSource } from 'mapbox-gl';
   import 'mapbox-gl/dist/mapbox-gl.css';
   import { onDestroy, onMount, untrack } from 'svelte';
-  import { aircraftCollection, behaviorCollection, circle, rings, trailCollection } from '../lib/geo';
+  import { aircraftCollection, behaviorCollection, circleBounds, destination, rings, trailCollection } from '../lib/geo';
   import { drawIcon, ICON_NAMES, ICON_PIXEL_RATIO } from '../lib/icons';
   import { radarizeBasemap } from '../lib/basemap';
   import { FALLBACK_FONT, MAPBOX_STYLE, MAPBOX_TOKEN } from '../lib/config';
   import { SCOPE } from '../lib/theme';
-  import { miles } from '../lib/format';
+  import { METERS_PER_MILE, miles } from '../lib/format';
   import { tooltipFor } from '../lib/tooltip';
   import Legend from './Legend.svelte';
   import type { Aircraft, LonLat, Outlines, Snapshot } from '../lib/types';
@@ -16,14 +16,17 @@
     aircraft: Aircraft[];
     area: Snapshot['area'] | null;
     selectedId: string | null;
-    listSelection: { id: string } | null;
+    highlightedId: string | null;
+    listSelection: { id: string; behavior?: 'circling' | 'hovering' } | null;
     onselect: (id: string | null) => void;
+    onhighlight: (id: string | null) => void;
     /** Compact mode: no detail panel, so the selection keeps its hover card open */
     compact?: boolean;
     outlines?: Outlines | null;
   }
 
-  let { aircraft, area, selectedId, listSelection, onselect, compact = false, outlines = null }: Props = $props();
+  let { aircraft, area, selectedId, highlightedId, listSelection, onselect, onhighlight, compact = false, outlines = null }: Props =
+    $props();
 
   const TOKEN = MAPBOX_TOKEN;
 
@@ -39,11 +42,14 @@
     SCOPE.phosphor,
   ];
   const freshnessOpacity: mapboxgl.ExpressionSpecification = ['match', ['get', 'freshness'], 'fading', 0.4, 'unknown', 0.75, 1];
+  const ringLabels: mapboxgl.ExpressionSpecification = ['all', ['==', ['geometry-type'], 'Point'], ['!=', ['get', 'kind'], 'home']];
+  const majorRingLabels: mapboxgl.ExpressionSpecification = ['all', ringLabels, ['==', ['get', 'major'], true]];
 
   let container = $state<HTMLDivElement>();
   let map: mapboxgl.Map | null = null;
   let ready = $state(false);
   let fittedHome: string | null = null;
+  let sparseRingLabels = true;
   // Set once someone pans or zooms; until then, size changes (a kiosk window going full screen) refit
   let userMoved = false;
   let hoveredId = $state<string | null>(null);
@@ -74,13 +80,24 @@
 
   function viewBounds(a: Snapshot['area']): mapboxgl.LngLatBoundsLike {
     const radius = a.view_radius_m ?? a.visible_radius_m * 1.08;
-    const ring = circle([a.home.longitude, a.home.latitude], radius, 32);
-    const lons = ring.map((p) => p[0]);
-    const lats = ring.map((p) => p[1]);
-    return [
-      [Math.min(...lons), Math.min(...lats)],
-      [Math.max(...lons), Math.max(...lats)],
-    ];
+    return circleBounds([a.home.longitude, a.home.latitude], radius);
+  }
+
+  function updateRingLabels(m: mapboxgl.Map, home: LonLat) {
+    const origin = m.project(home);
+    const nextMile = m.project(destination(home, 0, METERS_PER_MILE));
+    const sparse = Math.abs(origin.y - nextMile.y) < 56;
+    if (sparse === sparseRingLabels) return;
+    sparseRingLabels = sparse;
+    m.setFilter('ring-labels', sparse ? majorRingLabels : ringLabels);
+  }
+
+  function setHoveredAircraft(id: string | null) {
+    if (hoveredId === id) return;
+    hoveredId = id;
+    onhighlight(id);
+    const canvas = map?.getCanvas();
+    if (canvas) canvas.style.cursor = id === null ? '' : 'pointer';
   }
 
   function recenter() {
@@ -174,8 +191,14 @@
       id: 'ring-labels',
       type: 'symbol',
       source: 'rings',
-      filter: ['all', ['==', ['geometry-type'], 'Point'], ['!=', ['get', 'kind'], 'home']],
-      layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 11, 'text-offset': [0, -0.7] },
+      filter: majorRingLabels,
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-font': FONT,
+        'text-size': 11,
+        'text-offset': [0, -0.7],
+        'symbol-sort-key': ['match', ['get', 'kind'], 'collection', 0, 'visible', 1, 2],
+      },
       paint: {
         'text-color': SCOPE.ringLabel,
         'text-opacity': ['match', ['get', 'kind'], 'ring', 0.75, 1],
@@ -226,7 +249,9 @@
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-gradient': glow(color, peak),
-          'line-width': width,
+          'line-width': id === 'trails-selected'
+            ? width
+            : ['case', ['get', 'highlighted'], width + 0.9, ['get', 'insideVisible'], width, width * 0.55],
           'line-opacity': freshnessOpacity,
           'line-emissive-strength': 1,
         },
@@ -236,12 +261,13 @@
       id: 'selection',
       type: 'circle',
       source: 'aircraft',
-      filter: ['==', ['get', 'selected'], true],
+      filter: ['any', ['get', 'selected'], ['get', 'highlighted']],
       paint: {
-        'circle-radius': 17,
+        'circle-radius': ['case', ['get', 'selected'], 17, 15],
         'circle-color': 'transparent',
-        'circle-stroke-color': SCOPE.accent,
-        'circle-stroke-width': 2,
+        'circle-stroke-color': ['case', ['get', 'selected'], SCOPE.accent, SCOPE.phosphorText],
+        'circle-stroke-opacity': ['case', ['get', 'selected'], 1, freshnessOpacity],
+        'circle-stroke-width': ['case', ['get', 'selected'], 2, 1.5],
         'circle-emissive-strength': 1,
       },
     });
@@ -257,7 +283,7 @@
         'icon-rotation-alignment': 'map',
         'icon-allow-overlap': true,
         'icon-ignore-placement': true,
-        'symbol-sort-key': ['case', ['get', 'selected'], 2, ['match', ['get', 'kind'], ['rotorcraft', 'gyroplane'], 1, 0]],
+        'symbol-sort-key': ['case', ['get', 'selected'], 3, ['get', 'highlighted'], 2, helicopter, 1, 0],
         'text-field': ['get', 'label'],
         'text-font': FONT,
         'text-size': 12,
@@ -284,14 +310,14 @@
     });
     m.on('mousemove', 'aircraft', (e) => {
       const id = e.features?.[0]?.properties?.id;
-      hoveredId = id === undefined ? null : String(id);
-      m.getCanvas().style.cursor = 'pointer';
+      setHoveredAircraft(id === undefined ? null : String(id));
     });
-    m.on('mouseleave', 'aircraft', () => {
-      hoveredId = null;
-      m.getCanvas().style.cursor = '';
-    });
+    m.on('mouseleave', 'aircraft', () => setHoveredAircraft(null));
     m.on('move', () => view++);
+    m.on('zoomend', () => {
+      const a = untrack(() => area);
+      if (a) updateRingLabels(m, [a.home.longitude, a.home.latitude]);
+    });
     // Camera moves from fitBounds carry no originalEvent; drags, scrolls and the zoom buttons do
     m.on('movestart', (e) => {
       if ((e as { originalEvent?: unknown }).originalEvent) userMoved = true;
@@ -333,6 +359,7 @@
       fittedHome = key;
       map.fitBounds(viewBounds(area), { padding: 24, duration: 0 });
     }
+    updateRingLabels(map, home);
   });
 
   $effect(() => {
@@ -360,26 +387,48 @@
     });
   });
 
-  // Pan once on a row selection. Polls and replay seeks only update the marker.
+  // Frame a behavior or pan once to a row. Polls and replay seeks only update the marker.
   $effect(() => {
     const m = map;
     if (!ready || !m || !listSelection) return;
-    const id = listSelection.id;
+    const { id, behavior } = listSelection;
     untrack(() => {
       const target = aircraft.find((a) => a.id === id);
       if (!target) return;
+      const episode = behavior && target.behaviors.find((b) => b.kind === behavior);
+      if (episode) {
+        userMoved = true;
+        m.fitBounds(circleBounds(episode.center, Math.max(episode.radius_m * 1.4, 400)), {
+          padding: 40, duration: 600, maxZoom: 16,
+        });
+        return;
+      }
       const position: LonLat = [target.longitude, target.latitude];
-      if (m.getBounds().contains(position)) return;
+      const bounds = m.getBounds();
+      // The same aircraft can be rendered on the next world copy across the antimeridian.
+      if (bounds.contains(position) ||
+          bounds.contains([position[0] - 360, position[1]]) ||
+          bounds.contains([position[0] + 360, position[1]])) return;
       userMoved = true;
       m.panTo(position, { duration: 450 });
     });
   });
 
+  $effect(() => {
+    if (hoveredId !== null && !aircraft.some((a) => a.id === hoveredId)) {
+      untrack(() => setHoveredAircraft(null));
+    }
+  });
+
   // Every update: replace source data in place, never rebuild layers
   $effect(() => {
     if (!ready) return;
-    source('aircraft')?.setData(aircraftCollection(aircraft, selectedId));
-    source('trails')?.setData(trailCollection(aircraft, selectedId));
+    source('aircraft')?.setData(aircraftCollection(aircraft, selectedId, highlightedId));
+    source('trails')?.setData(trailCollection(aircraft, selectedId, highlightedId));
+  });
+
+  $effect(() => {
+    if (!ready) return;
     source('behaviors')?.setData(behaviorCollection(aircraft, selectedId));
   });
 </script>

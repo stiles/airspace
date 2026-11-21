@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte';
+  import Activity from './components/Activity.svelte';
   import AircraftList from './components/AircraftList.svelte';
   import DetailPanel from './components/DetailPanel.svelte';
   import FeedStatus from './components/FeedStatus.svelte';
@@ -36,7 +37,10 @@
   let fetchedAt = $state(0);
   let now = $state(Date.now());
   let selectedId = $state<string | null>(null);
-  let listSelection = $state.raw<{ id: string } | null>(null);
+  let listSelection = $state.raw<{ id: string; behavior?: 'circling' | 'hovering' } | null>(null);
+  let mapHoverId = $state<string | null>(null);
+  let rowHoverId = $state<string | null>(null);
+  let rowFocusId = $state<string | null>(null);
   let filters = $state<Filters>(defaultFilters());
   let filtersInitialized = false;
   // Map-only layout for a small always-on window; small windows start compact
@@ -44,6 +48,8 @@
 
   function toggleCompact() {
     compact = !compact;
+    rowHoverId = null;
+    rowFocusId = null;
     savePref('compact', compact);
   }
 
@@ -63,6 +69,12 @@
   const listed = $derived(
     (filters.listVisibleOnly ? onMap.filter((a) => a.inside_visible) : [...onMap]).sort((a, b) => a.distance_m - b.distance_m),
   );
+  const highlightedId = $derived(mapHoverId ?? rowHoverId ?? rowFocusId);
+  $effect(() => {
+    // Filtering and aging can remove a row without a pointer leave or blur event.
+    if (rowHoverId && !listed.some((a) => a.id === rowHoverId)) rowHoverId = null;
+    if (rowFocusId && !listed.some((a) => a.id === rowFocusId)) rowFocusId = null;
+  });
   const selected = $derived(aged.find((a) => a.id === selectedId) ?? null);
   const selectedLastSeen = $derived(
     !selected && selectedId ? (snapshot?.last_seen.find((a) => a.id === selectedId) ?? null) : null,
@@ -164,9 +176,9 @@
     listSelection = null;
   }
 
-  function selectFromList(id: string) {
+  function selectFromList(id: string, behavior?: 'circling' | 'hovering') {
     selectedId = id;
-    listSelection = { id };
+    listSelection = { id, behavior };
   }
 
   function keydown(e: KeyboardEvent) {
@@ -187,7 +199,6 @@
   {:else}
     {attribution?.provider ?? 'unknown source'}
   {/if}
-  · personal, noncommercial use
 {/snippet}
 
 <div class="app" class:compact>
@@ -220,7 +231,17 @@
   <main>
     <div class="map-column">
       <div class="map-pane" class:untrusted={view.untrusted}>
-        <MapView aircraft={onMap} area={snapshot?.area ?? null} {selectedId} {listSelection} onselect={select} {compact} {outlines} />
+        <MapView
+          aircraft={onMap}
+          area={snapshot?.area ?? null}
+          {selectedId}
+          {highlightedId}
+          {listSelection}
+          onselect={select}
+          onhighlight={(id) => (mapHoverId = id)}
+          {compact}
+          {outlines}
+        />
       </div>
       {#if compact && weather}
         <WeatherCard {weather} {now} {compact} />
@@ -247,22 +268,28 @@
           exportHref={sessionId !== null && selectedId ? exportUrl(sessionId, { aircraft: selectedId }) : null}
           onclose={() => select(null)}
         />
-        <h2 class="list-heading">
-          {#if snapshot && !view.untrusted}
-            <span data-testid="count">{listed.length} aircraft</span>
-          {:else}
-            Aircraft
-          {/if}
-          {#if snapshot}
-            <span class="list-scope">{filters.listVisibleOnly ? `Within ${visibleLabel} of home` : 'Full collection area'}</span>
-          {/if}
-        </h2>
         <div class="list-wrap">
+          {#if !view.untrusted}
+            <Activity aircraft={listed} onselect={selectFromList} />
+          {/if}
+          <h2 class="list-heading">
+            {#if snapshot && !view.untrusted}
+              <span data-testid="count">{listed.length} aircraft</span>
+            {:else}
+              Aircraft
+            {/if}
+            {#if snapshot}
+              <span class="list-scope">{filters.listVisibleOnly ? `Within ${visibleLabel} of home` : 'Full collection area'}</span>
+            {/if}
+          </h2>
           <AircraftList
             aircraft={listed}
             {selectedId}
+            {highlightedId}
             emptyMessage={emptyListMessage(view, aged.length > 0)}
             onselect={selectFromList}
+            onhover={(id) => (rowHoverId = id)}
+            onfocusaircraft={(id) => (rowFocusId = id)}
           />
         </div>
         {#if weather}

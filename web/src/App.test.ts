@@ -344,6 +344,56 @@ describe('Replay mode', () => {
 });
 
 describe('Map extras', () => {
+  it('links row hover and keyboard focus to map highlights without moving the camera', async () => {
+    render(App, { fetchFn: server([snapshot({ aircraft: [heli, jet] })]), pollMs: POLL });
+    await advance(0);
+    const m = map();
+    const homeFits = m.fitBounds.mock.calls.length;
+    const list = within(screen.getByTestId('aircraft-list'));
+    const heliRow = list.getByRole('button', { name: /N225LA/ });
+    const jetRow = list.getByRole('button', { name: /UAL2113/ });
+    const highlights = (sourceId: string) =>
+      m.getSource(sourceId)!.setData.mock.calls.at(-1)![0].features
+        .filter((f: { properties: { highlighted: boolean } }) => f.properties.highlighted)
+        .map((f: { properties: { id: string } }) => f.properties.id);
+
+    await fireEvent.focus(heliRow);
+    expect(highlights('aircraft')).toEqual([heli.id]);
+    expect(highlights('trails')).toEqual([heli.id]);
+
+    await fireEvent.pointerEnter(jetRow);
+    expect(highlights('aircraft')).toEqual([jet.id]);
+    await fireEvent.pointerLeave(jetRow);
+    expect(highlights('aircraft')).toEqual([heli.id]);
+
+    m.fire('mousemove:aircraft', { features: [{ properties: { id: jet.id } }] });
+    await tick();
+    expect(jetRow).toHaveClass('highlighted');
+    expect(heliRow).not.toHaveClass('highlighted');
+    m.fire('mouseleave:aircraft', {});
+    await tick();
+    expect(jetRow).not.toHaveClass('highlighted');
+
+    await fireEvent.blur(heliRow);
+    expect(highlights('aircraft')).toEqual([]);
+    expect(m.panTo).not.toHaveBeenCalled();
+    expect(m.fitBounds).toHaveBeenCalledTimes(homeFits);
+  });
+
+  it('adds mile labels when the map has room for them', async () => {
+    render(App, { fetchFn: server([snapshot()]), pollMs: POLL });
+    await advance(0);
+    const m = map();
+    expect(m.layerSpecs.find(({ id }) => id === 'ring-labels')).toMatchObject({
+      filter: ['all', expect.any(Array), ['==', ['get', 'major'], true]],
+    });
+
+    m.projectScale = 5000;
+    m.fire('zoomend', {});
+    expect(m.setFilter.mock.lastCall?.[0]).toBe('ring-labels');
+    expect(JSON.stringify(m.setFilter.mock.lastCall?.[1])).not.toContain('"major"');
+  });
+
   it('shows a hover card that follows its aircraft and clears on leave', async () => {
     const moved = { ...heli, longitude: -118.4, vertical_rate_fpm: 640 };
     render(App, { fetchFn: server([snapshot({ aircraft: [heli, jet] }), snapshot({ sequence: 2, aircraft: [moved, jet] })]), pollMs: POLL });
@@ -507,7 +557,7 @@ describe('Behaviors', () => {
     expect(rings.map((f: { properties: { kind: string } }) => f.properties.kind)).toEqual(['circling', 'hovering']);
     expect(rings[0].geometry.coordinates).toHaveLength(65);
 
-    await fireEvent.click(screen.getByRole('button', { name: /N225LA/ }));
+    await fireEvent.click(within(screen.getByTestId('aircraft-list')).getByRole('button', { name: /N225LA/ }));
     expect(screen.getByTestId('behavior')).toHaveTextContent(
       'Circling 12 min · 12 turns · radius 161 m · around 425 ft Inferred from the track, not the reason for it',
     );
@@ -515,6 +565,33 @@ describe('Behaviors', () => {
     map().fire('mousemove:aircraft', { features: [{ properties: { id: 'ab4ea1' } }] });
     await tick();
     expect(screen.getByTestId('map-tooltip')).toHaveTextContent('Hovering 15+ min · radius 29 m · around 1,800 ft');
+  });
+
+  it('frames a current behavior once and removes the activity when it ends', async () => {
+    render(App, {
+      fetchFn: server([
+        snapshot({ aircraft: [circling] }),
+        snapshot({ sequence: 2, aircraft: [circling] }),
+        snapshot({ sequence: 3, aircraft: [heli] }),
+      ]),
+      pollMs: POLL,
+    });
+    await advance(0);
+    const activity = screen.getByTestId('activity');
+    const m = map();
+    const homeFits = m.fitBounds.mock.calls.length;
+    await fireEvent.click(within(activity).getByRole('button', { name: /N225LA.*Circling 12 min/ }));
+
+    const [[west, south], [east, north]] = m.fitBounds.mock.lastCall![0];
+    const [longitude, latitude] = circling.behaviors[0].center;
+    expect((west + east) / 2).toBeCloseTo(longitude, 4);
+    expect((south + north) / 2).toBeCloseTo(latitude, 4);
+    expect(m.fitBounds).toHaveBeenCalledTimes(homeFits + 1);
+    expect(screen.getByTestId('detail')).toHaveTextContent('N225LA');
+
+    await advance(2 * POLL);
+    expect(m.fitBounds).toHaveBeenCalledTimes(homeFits + 1);
+    expect(screen.queryByTestId('activity')).toBeNull();
   });
 
   describe('home view, outlines and weather', () => {

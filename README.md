@@ -74,7 +74,9 @@ For an always-on setup, [docs/pi-setup.md](docs/pi-setup.md) covers installing A
 
 ### Dashboard
 
-- The aircraft list shows its distance limit and sorts by distance. Select an aircraft on the map or in the list to see its details. Selecting an offscreen aircraft in the list pans the map to it. Open **Legend** for map symbols and altitude labels (`015` is 1,500 ft barometric).
+- The aircraft list shows its distance limit and sorts by distance. Hover over a marker to highlight its row. Hover over a row or tab to it to highlight the marker and trail. Select a row to open details and bring an offscreen aircraft into view.
+- **Activity** appears above the list when a listed aircraft is inferred to be circling or hovering. Select the behavior to frame it on the map. **Recenter** returns to the home view.
+- Aircraft outside the home radius have shorter labels and thinner trails. At wider zooms, only the major distance rings have labels. Open **Legend** for map symbols and altitude labels (`015` is 1,500 ft barometric).
 - **Filters:** altitude presets, unknown altitude, on-ground aircraft and surface vehicles. Ground traffic is hidden by default to keep LAX out of the way. Filters run in the browser and never cause extra requests. `[filters]` sets their starting values, and `display.show_filters = false` hides the controls, for a screen nobody touches.
 - **Compact:** the button in the header switches to a map-only layout; clicking an aircraft pins its hover card. Small windows start compact.
 - **Replay:** use the Live/Replay switch. The timeline shows each poll (green succeeded, red failed, hatched while asleep) with an amber strip when a helicopter was in the feed. Drag to seek; space plays and pauses, ← and → step by poll, and the speed runs from 1× to 60×. The URL keeps `?session=&at=`, so any moment can be bookmarked.

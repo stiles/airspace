@@ -25,24 +25,34 @@ export function circle(center: LonLat, meters: number, steps = 128): LonLat[] {
   return ring;
 }
 
+export function circleBounds(center: LonLat, meters: number): [LonLat, LonLat] {
+  const ring = circle(center, meters, 32);
+  // Keep longitudes near the center even when the circle crosses the antimeridian.
+  const lons = ring.map(([lon]) => center[0] + ((lon - center[0] + 540) % 360) - 180);
+  const lats = ring.map(([, lat]) => lat);
+  return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+}
+
 export type RingKind = 'ring' | 'visible' | 'collection' | 'home';
+type RingProps = { kind: RingKind; label: string; major: boolean };
 
 /** Mile rings inside the visible radius, the visible boundary and the collection boundary. */
 export function rings(
   home: LonLat,
   visibleM: number,
   collectionM: number,
-): FeatureCollection<LineString | Point, { kind: RingKind; label: string }> {
-  const features: Feature<LineString | Point, { kind: RingKind; label: string }>[] = [];
-  const add = (meters: number, kind: RingKind, label: string) => {
-    features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: circle(home, meters) }, properties: { kind, label } });
-    features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: destination(home, 0, meters) }, properties: { kind, label } });
+): FeatureCollection<LineString | Point, RingProps> {
+  const features: Feature<LineString | Point, RingProps>[] = [];
+  const add = (meters: number, kind: RingKind, label: string, major = true) => {
+    const properties = { kind, label, major };
+    features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: circle(home, meters) }, properties });
+    features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: destination(home, 0, meters) }, properties });
   };
   const visibleMiles = visibleM / METERS_PER_MILE;
-  for (let mi = 1; mi < visibleMiles - 0.25; mi++) add(mi * METERS_PER_MILE, 'ring', `${mi} mi`);
+  for (let mi = 1; mi < visibleMiles - 0.25; mi++) add(mi * METERS_PER_MILE, 'ring', `${mi} mi`, mi % 5 === 0);
   add(visibleM, 'visible', `${+visibleMiles.toFixed(1)} mi`);
   if (collectionM > visibleM * 1.05) add(collectionM, 'collection', 'Collection limit');
-  features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: home }, properties: { kind: 'home', label: '' } });
+  features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: home }, properties: { kind: 'home', label: '', major: false } });
   return { type: 'FeatureCollection', features };
 }
 
@@ -63,14 +73,27 @@ export interface AircraftProps {
   kind: Aircraft['class'];
   freshness: Aircraft['freshness'];
   selected: boolean;
+  highlighted: boolean;
   label: string;
 }
 
-export function aircraftCollection(aircraft: Aircraft[], selectedId: string | null): FeatureCollection<Point, AircraftProps> {
+export function aircraftCollection(
+  aircraft: Aircraft[],
+  selectedId: string | null,
+  highlightedId: string | null = null,
+): FeatureCollection<Point, AircraftProps> {
   return {
     type: 'FeatureCollection',
     features: aircraft.map((a) => {
-      const alt = a.on_ground ? 'GND' : a.altitude_baro_ft === null ? '' : String(Math.round(a.altitude_baro_ft / 100)).padStart(3, '0');
+      const selected = a.id === selectedId;
+      const highlighted = a.id === highlightedId;
+      let label = identity(a);
+      if (a.inside_visible || selected || highlighted) {
+        const alt = a.on_ground ? 'GND' : a.altitude_baro_ft === null ? '' : String(Math.round(a.altitude_baro_ft / 100)).padStart(3, '0');
+        const operator = a.role && a.role !== 'private' ? a.operator_short : null;
+        const detail = [alt, operator].filter(Boolean).join(' ');
+        if (detail) label += `\n${detail}`;
+      }
       return {
         type: 'Feature',
         id: a.id,
@@ -81,10 +104,9 @@ export function aircraftCollection(aircraft: Aircraft[], selectedId: string | nu
           rotation: a.track_deg ?? 0,
           kind: a.class,
           freshness: a.freshness,
-          selected: a.id === selectedId,
-          label: [identity(a), [alt, a.role && a.role !== 'private' ? a.operator_short : null].filter(Boolean).join(' ')]
-            .filter(Boolean)
-            .join('\n'),
+          selected,
+          highlighted,
+          label,
         },
       };
     }),
@@ -118,9 +140,15 @@ export interface TrailProps {
   kind: Aircraft['class'];
   freshness: Aircraft['freshness'];
   selected: boolean;
+  highlighted: boolean;
+  insideVisible: boolean;
 }
 
-export function trailCollection(aircraft: Aircraft[], selectedId: string | null): FeatureCollection<MultiLineString, TrailProps> {
+export function trailCollection(
+  aircraft: Aircraft[],
+  selectedId: string | null,
+  highlightedId: string | null = null,
+): FeatureCollection<MultiLineString, TrailProps> {
   return {
     type: 'FeatureCollection',
     features: aircraft
@@ -130,7 +158,14 @@ export function trailCollection(aircraft: Aircraft[], selectedId: string | null)
         id: a.id,
         // Separate segments stay separate: a coverage gap is never drawn as a route
         geometry: { type: 'MultiLineString', coordinates: a.trail },
-        properties: { id: a.id, kind: a.class, freshness: a.freshness, selected: a.id === selectedId },
+        properties: {
+          id: a.id,
+          kind: a.class,
+          freshness: a.freshness,
+          selected: a.id === selectedId,
+          highlighted: a.id === highlightedId,
+          insideVisible: a.inside_visible,
+        },
       })),
   };
 }

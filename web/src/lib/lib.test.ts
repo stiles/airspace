@@ -4,7 +4,7 @@ import { ApiError, fetchSnapshot, replayTarget, startPolling } from './api';
 import { applyFilters, defaultFilters } from './filters';
 import { altitude, cardinal, degrees, feet, knots, seconds, verticalRate } from './format';
 import { ageAircraft } from './freshness';
-import { aircraftCollection, circle, destination, iconFor, rings, trailCollection } from './geo';
+import { aircraftCollection, circle, circleBounds, destination, iconFor, rings, trailCollection } from './geo';
 import { statusView } from './status';
 import { tooltipFor } from './tooltip';
 import { observedAgo, sky, temperature, wind } from './weather';
@@ -71,6 +71,19 @@ describe('geo', () => {
     const home = rings([-118.42, 34.0], 8046.72, 18520).features.find((f) => f.properties.kind === 'home');
     expect(home?.geometry).toEqual({ type: 'Point', coordinates: [-118.42, 34.0] });
   });
+  it('keeps bounds local across the antimeridian', () => {
+    const [[west, south], [east, north]] = circleBounds([179.99, 34], 2000);
+    expect(east).toBeGreaterThan(180);
+    expect(east - west).toBeLessThan(0.1);
+    expect(south).toBeLessThan(34);
+    expect(north).toBeGreaterThan(34);
+  });
+  it('marks five-mile intervals and both boundaries for sparse labels', () => {
+    const labels = rings([-118.42, 34], 16093.44, 18520)
+      .features.filter((f) => f.geometry.type === 'Point' && f.properties.major)
+      .map((f) => f.properties.label);
+    expect(labels).toEqual(['5 mi', '10 mi', 'Collection limit']);
+  });
   it('icons: unrotated without a track, helicopter only when classified', () => {
     expect(iconFor({ class: 'rotorcraft', track_deg: 90 })).toBe('heli');
     expect(iconFor({ class: 'rotorcraft', track_deg: null })).toBe('heli-still');
@@ -83,6 +96,23 @@ describe('geo', () => {
     expect(fc.features[0].geometry.coordinates).toEqual([-118.41, 34.01]);
     expect(fc.features[0].properties).toMatchObject({ rotation: 0, icon: 'heli', selected: false, label: 'N225LA\n015' });
     expect(fc.features[1].properties).toMatchObject({ icon: 'heli-still', selected: true });
+  });
+  it('shortens outside-home labels while keeping freshness and full labels for emphasis', () => {
+    const outside = aircraft({ id: 'outside', inside_visible: false, freshness: 'fading' });
+    const selected = aircraft({ ...outside, id: 'selected' });
+    const highlighted = aircraft({ ...outside, id: 'highlighted' });
+    const fc = aircraftCollection([outside, selected, highlighted], 'selected', 'highlighted');
+    expect(fc.features.map((f) => f.properties)).toMatchObject([
+      { label: 'N225LA', freshness: 'fading', selected: false, highlighted: false },
+      { label: 'N225LA\n015', selected: true },
+      { label: 'N225LA\n015', highlighted: true },
+    ]);
+    const trails = trailCollection([outside, selected, highlighted], 'selected', 'highlighted');
+    expect(trails.features.map((f) => f.properties)).toMatchObject([
+      { insideVisible: false, freshness: 'fading', selected: false, highlighted: false },
+      { insideVisible: false, selected: true },
+      { insideVisible: false, highlighted: true },
+    ]);
   });
   it('trail segments stay separate', () => {
     const trail = [
