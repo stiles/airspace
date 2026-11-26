@@ -40,6 +40,7 @@
   }
   .ok .dot {
     background: var(--phosphor);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--phosphor) 55%, transparent);
   }
   .info .dot {
     background: var(--accent);
@@ -57,13 +58,32 @@
   }
   .alert .dot {
     background: var(--alert);
-    animation: pulse 1.2s ease-in-out infinite;
   }
   .alert .detail {
     color: var(--alert-text);
     white-space: normal;
   }
-  @keyframes pulse {
+  /* Soft status LEDs; opacity only, under 3 flashes/s, off when reduced motion is preferred */
+  @media (prefers-reduced-motion: no-preference) {
+    .ok .dot {
+      animation: live-pulse 2.4s ease-in-out infinite;
+    }
+    .alert .dot {
+      animation: alert-pulse 1.2s ease-in-out infinite;
+    }
+  }
+  @keyframes live-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--phosphor) 50%, transparent);
+      opacity: 1;
+    }
+    50% {
+      box-shadow: 0 0 0 6px transparent;
+      opacity: 0.55;
+    }
+  }
+  @keyframes alert-pulse {
     50% {
       opacity: 0.35;
     }

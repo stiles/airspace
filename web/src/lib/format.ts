@@ -55,6 +55,16 @@ export function clock(iso: string | null): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
 }
 
+/** Wall clock in US Pacific, e.g. "4:30 PM PT". Uses the Pi's clock; not the weather observation. */
+export function wallClockPt(nowMs: number): string {
+  const time = new Date(nowMs).toLocaleTimeString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `${time} PT`;
+}
+
 export function identity(a: Pick<Aircraft, 'callsign' | 'registration' | 'id'>): string {
   return a.callsign ?? a.registration ?? a.id.toUpperCase();
 }

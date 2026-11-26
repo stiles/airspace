@@ -626,7 +626,7 @@ describe('Behaviors', () => {
     const city: Outlines = {
       type: 'FeatureCollection',
       features: [{
-        type: 'Feature', properties: { name: 'Los Angeles city limits' },
+        type: 'Feature', properties: { name: 'LA city limits' },
         geometry: { type: 'LineString', coordinates: [[-118.5, 34.0], [-118.3, 34.1]] },
       }],
     };
@@ -652,7 +652,7 @@ describe('Behaviors', () => {
       await advance(0);
       expect(map().layers.indexOf('outlines')).toBeLessThan(map().layers.indexOf('rings'));
       expect(map().getSource('outlines')!.setData.mock.calls.at(-1)![0].features).toHaveLength(1);
-      expect(screen.getByTestId('legend')).toHaveTextContent('Los Angeles city limits');
+      expect(screen.getByTestId('legend')).toHaveTextContent('LA city limits');
     });
 
     it('summarizes the weather in the sidebar with observation details on demand', async () => {
@@ -662,7 +662,8 @@ describe('Behaviors', () => {
       const summary = card.querySelector('summary')!;
       expect(card.closest('aside')).toBe(screen.getByRole('complementary'));
       expect(card.open).toBe(false);
-      expect(summary).toHaveTextContent('Weather 64° Partly Cloudy · Wind SW 15 mph');
+      expect(summary).toHaveTextContent('64° Partly Cloudy · Wind SW 15 mph');
+      expect(summary).not.toHaveTextContent('Weather');
       await fireEvent.click(summary);
       expect(card.open).toBe(true);
       expect(card).toHaveTextContent('NWS · KSMO');
@@ -714,11 +715,15 @@ describe('Behaviors', () => {
       const aside = within(screen.getByRole('complementary'));
       const legend = screen.getByTestId('legend');
       const card = aside.getByTestId('weather');
-      expect(legend).toHaveTextContent('Los Angeles city limits');
+      expect(legend).toHaveTextContent('LA city limits');
+      expect(legend.querySelector('h2')).toBeNull();
       expect(card).toHaveTextContent('Wind SW 15 mph, gusts 21');
       expect(card).toHaveTextContent('Visibility 10 mi, no ceiling');
+      expect(card.querySelector('.temp')).toHaveTextContent('64°');
+      expect(card.querySelector('.clock')).toHaveTextContent(/PT$/);
       expect(legend.querySelector('summary')).toBeNull();
       expect(card.querySelector('summary')).toBeNull();
+      expect(card).not.toHaveTextContent(/^Weather/);
       const list = aside.getByTestId('aircraft-list');
       expect(list).toHaveTextContent('N225LA');
       expect(list).not.toHaveTextContent('UAL2113');

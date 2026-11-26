@@ -344,7 +344,8 @@
     --muted-strong: #86b89c;
     --muted: #5f9077;
     --faint: #4a705c;
-    --phosphor: #3dff8f;
+    --phosphor: #b8ff45;
+    --phosphor-text: #d4ffa0;
     --accent: #7fe7ff;
     --outline: #4cc2d8;
     --amber: #ffb020;
@@ -559,6 +560,13 @@
   .tv-display .list-heading,
   .tv-display footer {
     padding-block: 4px;
+  }
+  /* Room-scale weather: the number carries across the room; the clock sits beside it */
+  .tv-display :global(.weather.roomy .temp) {
+    font-size: 56px;
+  }
+  .tv-display :global(.weather.roomy .clock) {
+    font-size: 22px;
   }
   footer {
     padding: 8px 12px;

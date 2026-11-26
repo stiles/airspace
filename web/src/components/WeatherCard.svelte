@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { miles } from '../lib/format';
+  import { miles, wallClockPt } from '../lib/format';
   import { observedAgo, observedClock, sky, temperature, WEATHER_STALE_S, wind } from '../lib/weather';
   import type { Weather } from '../lib/types';
 
@@ -10,7 +10,8 @@
   const obs = $derived(weather.observation);
   const ageS = $derived(obs ? Math.max(0, (now - Date.parse(obs.observed_at)) / 1000) : null);
   const stale = $derived(ageS !== null && ageS > WEATHER_STALE_S);
-  const conditions = $derived(obs ? [temperature(obs), obs.description].filter(Boolean).join(' ') : '');
+  const temp = $derived(obs ? temperature(obs) : null);
+  const conditions = $derived(obs ? [temp, obs.description].filter(Boolean).join(' ') : '');
   const summary = $derived.by(() => {
     if (!obs) return weather.status === 'starting' ? 'Checking…' : 'Unavailable';
     const steadyWind = wind({ ...obs, wind_gust_mph: null });
@@ -18,10 +19,10 @@
   });
   const lines = $derived(obs ? [wind(obs), sky(obs)].filter((l): l is string => l !== null) : []);
   const station = $derived(weather.station);
+  const clock = $derived(wallClockPt(now));
 </script>
 
 {#snippet headline(value: string)}
-  <span class="label">Weather</span>{' '}
   {#if stale}<span class="status">Stale · </span>{/if}{value}
 {/snippet}
 
@@ -49,12 +50,21 @@
 {/snippet}
 
 {#if readOnly}
-  <section class="weather" class:stale data-testid="weather">
-    <h2>{@render headline(obs ? (conditions || 'Observation available') : summary)}</h2>
+  <section class="weather roomy" class:stale aria-label="Weather" data-testid="weather">
+    <div class="topline">
+      <div class="temp" aria-hidden={temp ? undefined : true}>{temp ?? '—'}</div>
+      <div class="beside">
+        <time class="clock" datetime={new Date(now).toISOString()}>{clock}</time>
+        <div class="desc">
+          {#if stale}<span class="status">Stale · </span>{/if}
+          {obs ? (obs.description || 'Observation available') : summary}
+        </div>
+      </div>
+    </div>
     {@render details()}
   </section>
 {:else}
-  <details class="weather" class:compact class:stale data-testid="weather">
+  <details class="weather" class:compact class:stale aria-label="Weather" data-testid="weather">
     <summary>{@render headline(summary)}</summary>
     {@render details()}
   </details>
@@ -80,11 +90,39 @@
     background: rgba(5, 12, 8, 0.9);
     zoom: var(--ui-scale, 1);
   }
-  h2 {
-    margin: 0;
-    padding: 5px 12px 2px;
-    font-size: inherit;
-    font-weight: 600;
+  .roomy {
+    padding: 8px 14px 6px;
+  }
+  .topline {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    min-width: 0;
+  }
+  .temp {
+    flex: none;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 42px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  .beside {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .clock {
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .desc {
+    color: var(--text-soft);
+    font-size: 13px;
   }
   summary {
     overflow: hidden;
@@ -100,17 +138,13 @@
   details[open] summary {
     white-space: normal;
   }
-  .label {
-    margin-right: 4px;
-    color: var(--muted-strong);
-  }
   .reading {
     display: grid;
     gap: 3px;
     padding: 0 12px 9px;
   }
-  section .reading {
-    padding-bottom: 5px;
+  .roomy .reading {
+    padding: 6px 0 0;
   }
   .age,
   .station {

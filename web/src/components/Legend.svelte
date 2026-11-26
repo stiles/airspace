@@ -69,13 +69,12 @@
 {/snippet}
 
 {#if readOnly}
-  <section class="static-legend" data-testid="legend">
-    <h2>Legend</h2>
+  <section class="static-legend" aria-label="Map key" data-testid="legend">
     {@render entries()}
   </section>
 {:else}
   <details class="legend" open={initiallyOpen} ontoggle={toggle} data-testid="legend">
-    <summary>Legend</summary>
+    <summary aria-label="Map key"><span class="summary-mark" aria-hidden="true"></span></summary>
     {@render entries()}
   </details>
 {/if}
@@ -97,32 +96,18 @@
     font-size: 12px;
   }
   .static-legend {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 12px;
-    padding: 6px 12px;
+    padding: 8px 14px 10px;
     border-top: 1px solid var(--line);
     background: var(--panel);
     color: var(--text-soft);
     font-size: 12px;
     zoom: var(--ui-scale, 1);
   }
-  .static-legend h2 {
-    margin: 0;
-    padding-top: 2px;
-    color: var(--muted-strong);
-    font-size: inherit;
-    font-weight: 600;
-  }
   .static-legend ul {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 100px), 1fr));
-    gap: 2px 10px;
+    grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+    gap: 4px 18px;
     padding: 0;
-  }
-  .static-legend li {
-    white-space: normal;
-    overflow-wrap: anywhere;
   }
   .static-legend li.gap {
     margin: 0;
@@ -131,15 +116,18 @@
   }
   @media (max-height: 540px) {
     .static-legend {
-      padding-block: 3px;
+      padding-block: 4px;
     }
     .static-legend ul {
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 80px), 1fr));
-      column-gap: 6px;
+      grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+      gap: 2px 12px;
     }
   }
   summary {
-    padding: 5px 10px;
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 4px 10px;
     color: var(--muted-strong);
     cursor: pointer;
     user-select: none;
@@ -148,17 +136,30 @@
     outline: 2px solid var(--accent);
     outline-offset: -2px;
   }
+  .summary-mark {
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 7px solid currentColor;
+  }
+  details[open] > summary .summary-mark {
+    transform: rotate(90deg);
+  }
   ul {
     margin: 0;
     padding: 2px 10px 8px;
     list-style: none;
   }
   li {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1.25rem minmax(0, 1fr);
     align-items: center;
-    gap: 8px;
-    min-height: 20px;
-    white-space: nowrap;
+    column-gap: 8px;
+    min-height: 22px;
+  }
+  .static-legend li {
+    min-height: 24px;
   }
   li.gap {
     margin-top: 6px;
@@ -166,7 +167,7 @@
     border-top: 1px solid var(--line-soft);
   }
   .sym {
-    flex: none;
+    justify-self: center;
     width: 16px;
     height: 16px;
     fill: currentColor;
@@ -195,7 +196,7 @@
     color: var(--accent);
   }
   .line {
-    flex: none;
+    justify-self: center;
     width: 16px;
     height: 0;
     border-top: 1px solid var(--ring);
@@ -218,31 +219,29 @@
     box-shadow: 0 0 4px var(--outline);
   }
   .orbit {
-    flex: none;
+    justify-self: center;
     box-sizing: border-box;
     width: 14px;
     height: 14px;
-    margin: 0 1px;
     border: 1.5px dashed var(--amber);
     border-radius: 50%;
   }
   .dot {
-    flex: none;
+    justify-self: center;
     box-sizing: border-box;
     width: 10px;
     height: 10px;
-    margin: 0 3px;
     border: 2px solid var(--bg);
     border-radius: 50%;
     background: var(--accent);
     box-shadow: 0 0 0 1px var(--accent);
   }
   .alt {
-    flex: none;
-    width: 16px;
-    color: #a6f7c6;
+    justify-self: center;
+    color: var(--phosphor-text, #d4ffa0);
     font-family: var(--mono);
     font-size: 9px;
     letter-spacing: -0.03em;
+    text-align: center;
   }
 </style>

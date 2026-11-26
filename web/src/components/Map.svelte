@@ -52,6 +52,7 @@
   let container = $state<HTMLDivElement>();
   let map: mapboxgl.Map | null = null;
   let ready = $state(false);
+  let homePulse = 0;
   let fittedHome: string | null = null;
   let sparseRingLabels = true;
   // Set once someone pans or zooms; until then, size changes (a kiosk window going full screen) refit
@@ -214,6 +215,18 @@
         'text-halo-color': SCOPE.halo,
         'text-halo-width': 1,
         'text-emissive-strength': 1,
+      },
+    });
+    m.addLayer({
+      id: 'home-pulse',
+      type: 'circle',
+      source: 'rings',
+      filter: ['==', ['get', 'kind'], 'home'],
+      paint: {
+        'circle-radius': 4,
+        'circle-color': SCOPE.accent,
+        'circle-opacity': 0,
+        'circle-emissive-strength': 1,
       },
     });
     m.addLayer({
@@ -390,11 +403,29 @@
     }
     map.on('load', () => {
       addLayers(map!);
+      startHomePulse(map!);
       ready = true;
     });
   });
 
-  onDestroy(() => map?.remove());
+  function startHomePulse(m: mapboxgl.Map) {
+    // jsdom has no matchMedia; treat that as reduced motion (no animation in tests)
+    if (typeof matchMedia !== 'function' || !matchMedia('(prefers-reduced-motion: no-preference)').matches) return;
+    const periodMs = 2400;
+    const tick = (t: number) => {
+      if (!map || map !== m || !m.getLayer('home-pulse')) return;
+      const phase = (t % periodMs) / periodMs;
+      m.setPaintProperty('home-pulse', 'circle-radius', 4 + phase * 16);
+      m.setPaintProperty('home-pulse', 'circle-opacity', 0.5 * (1 - phase));
+      homePulse = requestAnimationFrame(tick);
+    };
+    homePulse = requestAnimationFrame(tick);
+  }
+
+  onDestroy(() => {
+    cancelAnimationFrame(homePulse);
+    map?.remove();
+  });
 
   // Area changes rarely: rings, and the initial view
   $effect(() => {

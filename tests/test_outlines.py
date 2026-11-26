@@ -18,7 +18,7 @@ def test_repo_boundary_loads():
     fc = load([REPO / "boundaries" / "los-angeles.geojson"])
     assert len(fc["features"]) == 1
     feature = fc["features"][0]
-    assert feature["properties"] == {"name": "Los Angeles city limits"}
+    assert feature["properties"] == {"name": "LA city limits"}
     assert feature["geometry"]["type"] == "Polygon"
 
 

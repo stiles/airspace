@@ -2,8 +2,9 @@
 // variables (App.svelte); keep the two in step.
 
 export const SCOPE = {
-  phosphor: '#3dff8f', // aircraft, visible boundary
-  phosphorText: '#a6f7c6',
+  // Yellower lime than the basemap greens (hue ~150), so aircraft read against roads and labels
+  phosphor: '#b8ff45', // aircraft, trails, visible boundary
+  phosphorText: '#d4ffa0',
   ring: '#1f7a4a',
   ringLabel: '#3fbf7a',
   amber: '#ffb020', // helicopters
