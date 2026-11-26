@@ -271,7 +271,7 @@
     {:else}
       <aside>
         {#if tvDisplay && weather}
-          <WeatherCard {weather} {now} readOnly />
+          <WeatherCard {weather} {now} readOnly timeZone={snapshot?.area.timezone} />
         {/if}
         {#if showControls && snapshot?.area.show_filters !== false}
           <FiltersPanel
@@ -551,7 +551,9 @@
     overflow-y: auto;
   }
   .tv-display aside {
-    max-width: 45%;
+    /* A bit wider than the desktop panel so the clock and list rows don't wrap */
+    width: calc(420px * (1 + (var(--ui-scale, 1) - 1) * 0.6) / var(--ui-scale, 1));
+    max-width: 48%;
   }
   .tv-display .list-wrap {
     overflow: clip;

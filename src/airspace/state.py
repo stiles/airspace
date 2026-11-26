@@ -360,6 +360,7 @@ class StateBuilder:
                 "text_scale": self.config.display.text_scale,
                 "tv_display": self.config.display.tv_display,
                 "show_filters": self.config.display.show_filters,
+                "timezone": self.config.display.timezone,
                 # Older version 1 dashboards read the altitude limit directly from area.
                 "max_altitude_baro_ft": self.config.filters.max_altitude_baro_ft,
                 "filters": self.config.filters.model_dump(),

@@ -96,18 +96,26 @@
     font-size: 12px;
   }
   .static-legend {
-    padding: 8px 14px 10px;
+    padding: 6px 12px 8px;
     border-top: 1px solid var(--line);
     background: var(--panel);
     color: var(--text-soft);
     font-size: 12px;
     zoom: var(--ui-scale, 1);
   }
+  /* Pack items left; stretching columns was leaving large empty gaps and forcing a second row */
   .static-legend ul {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
-    gap: 4px 18px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 12px;
     padding: 0;
+  }
+  .static-legend li {
+    flex: 0 0 auto;
+    width: max-content;
+    max-width: 100%;
+    min-height: 20px;
   }
   .static-legend li.gap {
     margin: 0;
@@ -116,11 +124,10 @@
   }
   @media (max-height: 540px) {
     .static-legend {
-      padding-block: 4px;
+      padding-block: 3px;
     }
     .static-legend ul {
-      grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-      gap: 2px 12px;
+      gap: 1px 10px;
     }
   }
   summary {

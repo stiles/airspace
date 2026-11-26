@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { miles, wallClockPt } from '../lib/format';
+  import { miles, wallClock } from '../lib/format';
   import { observedAgo, observedClock, sky, temperature, WEATHER_STALE_S, wind } from '../lib/weather';
   import type { Weather } from '../lib/types';
 
-  let { weather, now, compact = false, readOnly = false }: {
-    weather: Weather; now: number; compact?: boolean; readOnly?: boolean;
+  let { weather, now, compact = false, readOnly = false, timeZone = 'America/Los_Angeles' }: {
+    weather: Weather; now: number; compact?: boolean; readOnly?: boolean; timeZone?: string;
   } = $props();
 
   const obs = $derived(weather.observation);
@@ -19,7 +19,7 @@
   });
   const lines = $derived(obs ? [wind(obs), sky(obs)].filter((l): l is string => l !== null) : []);
   const station = $derived(weather.station);
-  const clock = $derived(wallClockPt(now));
+  const clock = $derived(wallClock(now, timeZone));
 </script>
 
 {#snippet headline(value: string)}
@@ -97,7 +97,6 @@
     display: flex;
     align-items: baseline;
     gap: 14px;
-    min-width: 0;
   }
   .temp {
     flex: none;
@@ -111,7 +110,6 @@
   .beside {
     display: grid;
     gap: 2px;
-    min-width: 0;
   }
   .clock {
     color: var(--text);
@@ -119,10 +117,14 @@
     font-size: 18px;
     font-weight: 500;
     letter-spacing: 0.02em;
+    white-space: nowrap;
   }
   .desc {
+    overflow: hidden;
     color: var(--text-soft);
     font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   summary {
     overflow: hidden;

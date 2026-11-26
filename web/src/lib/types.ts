@@ -120,6 +120,8 @@ export interface Snapshot {
     tv_display?: boolean;
     /** False hides the altitude menu and checkboxes; `filters` then stays fixed */
     show_filters?: boolean;
+    /** IANA timezone for the TV wall clock, e.g. America/Los_Angeles */
+    timezone?: string;
     filters?: ConfigFilters;
   };
   thresholds: { fade_s: number; hide_s: number; trail_gap_s: number; trail_duration_s: number };

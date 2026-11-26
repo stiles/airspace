@@ -720,7 +720,7 @@ describe('Behaviors', () => {
       expect(card).toHaveTextContent('Wind SW 15 mph, gusts 21');
       expect(card).toHaveTextContent('Visibility 10 mi, no ceiling');
       expect(card.querySelector('.temp')).toHaveTextContent('64°');
-      expect(card.querySelector('.clock')).toHaveTextContent(/PT$/);
+      expect(card.querySelector('.clock')).toHaveTextContent(/P[SD]T$/);
       expect(legend.querySelector('summary')).toBeNull();
       expect(card.querySelector('summary')).toBeNull();
       expect(card).not.toHaveTextContent(/^Weather/);

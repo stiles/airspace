@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { aircraft, snapshot } from '../test/fixtures';
 import { ApiError, fetchSnapshot, replayTarget, startPolling } from './api';
 import { applyFilters, defaultFilters } from './filters';
-import { altitude, cardinal, degrees, feet, knots, seconds, verticalRate, wallClockPt } from './format';
+import { altitude, cardinal, degrees, feet, knots, seconds, verticalRate, wallClock } from './format';
 import { ageAircraft } from './freshness';
 import { aircraftCollection, circle, circleBounds, destination, iconFor, rings, trailCollection } from './geo';
 import { statusView } from './status';
@@ -24,9 +24,10 @@ describe('format', () => {
     expect(altitude({ altitude_baro_ft: null, on_ground: true })).toBe('On ground');
     expect(altitude({ altitude_baro_ft: null, on_ground: null })).toBe('Unknown');
   });
-  it('formats Pacific wall time in US style', () => {
+  it('formats wall time in US style for a configured timezone', () => {
     // 2026-11-26T20:30:00Z is 12:30 PM PST
-    expect(wallClockPt(Date.parse('2026-11-26T20:30:00.000Z'))).toBe('12:30 PM PT');
+    expect(wallClock(Date.parse('2026-11-26T20:30:00.000Z'))).toBe('12:30 PM PST');
+    expect(wallClock(Date.parse('2026-11-26T20:30:00.000Z'), 'America/New_York')).toBe('3:30 PM EST');
   });
   it('formats ages and bearings', () => {
     expect(seconds(42.4)).toBe('42s');

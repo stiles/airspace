@@ -123,6 +123,18 @@ class Display(BaseModel):
     tv_display: bool = False
     # The altitude menu and checkboxes above the list; [filters] sets their starting values
     show_filters: bool = True
+    # IANA zone for the TV clock, e.g. America/Los_Angeles; the dashboard shows PST/PDT
+    timezone: str = "America/Los_Angeles"
+
+    @model_validator(mode="after")
+    def known_timezone(self) -> Display:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(self.timezone)
+        except ZoneInfoNotFoundError:
+            raise ValueError(f"unknown timezone {self.timezone!r}; use an IANA name like America/Los_Angeles") from None
+        return self
 
     @property
     def outline_paths(self) -> list[Path]:
@@ -276,6 +288,8 @@ show_la_boundary = false
 tv_display = false
 # Show the altitude menu and checkboxes above the list; false fixes the [filters] below
 show_filters = true
+# Wall clock on the TV weather card (IANA name); the dashboard shows PST or PDT
+timezone = "America/Los_Angeles"
 
 [filters]
 # Starting filters for the map and list

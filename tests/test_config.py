@@ -37,8 +37,16 @@ def test_template_renders_valid_config():
     defaults = tomllib.loads(render(34.0, -118.42, "Home"))
     assert defaults["home"]["title"] == "Airspace"
     assert defaults["display"]["tv_display"] is False
+    assert defaults["display"]["timezone"] == "America/Los_Angeles"
     with pytest.raises(ValueError):
         render(-118.42, 34.0, "Reversed")
+
+
+def test_display_timezone_must_be_iana():
+    base = {"home": {"latitude": 34.0, "longitude": -118.42}}
+    assert Config.model_validate({**base, "display": {"timezone": "America/Denver"}}).display.timezone == "America/Denver"
+    with pytest.raises(ValueError, match="unknown timezone"):
+        Config.model_validate({**base, "display": {"timezone": "Pacific/NotAZone"}})
 
 
 def test_la_boundary_toggle_uses_the_bundled_file_once():

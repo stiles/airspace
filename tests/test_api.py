@@ -150,6 +150,7 @@ def test_weather_view_radius_and_outlines(config, fixture_bytes):
         assert client.get("/api/health").json()["weather"] == weather["status"]
         assert round(state["area"]["view_radius_m"]) == 9656 and state["area"]["text_scale"] == 1.5
         assert state["area"]["tv_display"] is True
+        assert state["area"]["timezone"] == "America/Los_Angeles"
         outlines = client.get("/api/outlines").json()
         assert outlines["features"][0]["properties"]["name"] == "LA city limits"
 
